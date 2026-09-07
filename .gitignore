@@ -1,0 +1,50 @@
+# 依赖
+node_modules/
+
+# 构建产物
+dist/
+dist-ssr/
+
+# 测试与覆盖率
+coverage/
+.test-output/
+playwright-report/
+test-results/
+
+# 本地环境变量
+.env.local
+.env.*.local
+
+# 日志
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# 编辑器配置
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# 操作系统文件
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 工具缓存
+.eslintcache
+.stylelintcache
+.vite/
+*.tsbuildinfo
+
+# 自动生成的类型文件
+src/types/import/auto-imports.d.ts
+src/types/import/components.d.ts
+.auto-import.json
+
+# 本地规则
+.cursorrules

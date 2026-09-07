@@ -1,0 +1,14 @@
+{
+  "timestamp": "2026-09-03T03:49:32.468Z",
+  "checks": [
+    "existing hierarchy accepted without changing rows",
+    "cycle rejected before persistence",
+    "stale hierarchy rejected",
+    "anonymous hierarchy write denied",
+    "all menu values and update times unchanged",
+    "current-user menus contain database IDs only"
+  ],
+  "databaseChanges": false,
+  "snapshotSha256": "bf3bc0b99c35e462d89bba13a27a8b1337105a751638ce3654586c1447682f53",
+  "permissionCount": 21
+}

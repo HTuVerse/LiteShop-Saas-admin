@@ -1,0 +1,617 @@
+[
+  {
+    "code": "config:banner:add",
+    "parent": "config:banner",
+    "methods": ["BannerController.addBanner"]
+  },
+  {
+    "code": "config:banner:delete",
+    "parent": "config:banner",
+    "methods": ["BannerController.deleteBanner", "BannerController.batchDelete"]
+  },
+  {
+    "code": "config:banner:edit",
+    "parent": "config:banner",
+    "methods": ["BannerController.updateBanner", "BannerController.updateSortOrder"]
+  },
+  {
+    "code": "config:banner:status",
+    "parent": "config:banner",
+    "methods": ["BannerController.updateStatus"]
+  },
+  {
+    "code": "config:basic:add",
+    "parent": "config:basic",
+    "methods": ["AppConfigController.addConfig"]
+  },
+  {
+    "code": "config:basic:delete",
+    "parent": "config:basic",
+    "methods": ["AppConfigController.deleteConfig"]
+  },
+  {
+    "code": "config:basic:edit",
+    "parent": "config:basic",
+    "methods": [
+      "AppConfigController.updateConfig",
+      "AppConfigController.updateConfigValue",
+      "AppConfigController.batchUpdateConfigs"
+    ]
+  },
+  {
+    "code": "config:basic:refresh",
+    "parent": "config:basic",
+    "methods": ["AppConfigController.refreshCache"]
+  },
+  {
+    "code": "marketing:coupon:add",
+    "parent": "marketing:coupon",
+    "methods": ["CouponController.createCoupon"]
+  },
+  {
+    "code": "marketing:coupon:delete",
+    "parent": "marketing:coupon",
+    "methods": ["CouponController.deleteCoupon"]
+  },
+  {
+    "code": "marketing:coupon:edit",
+    "parent": "marketing:coupon",
+    "methods": ["CouponController.updateCoupon"]
+  },
+  {
+    "code": "marketing:coupon:send",
+    "parent": "marketing:coupon",
+    "methods": ["UserCouponController.sendCouponToUser"]
+  },
+  {
+    "code": "marketing:coupon:status",
+    "parent": "marketing:coupon",
+    "methods": ["CouponController.toggleStatus"]
+  },
+  {
+    "code": "marketing:coupon:verify",
+    "parent": "marketing:coupon",
+    "methods": ["VerifyRecordController.verifyCode"]
+  },
+  {
+    "code": "marketing:lottery:add",
+    "parent": "marketing:lottery",
+    "methods": ["LotteryActivityController.addActivity"]
+  },
+  {
+    "code": "marketing:lottery:chance",
+    "parent": "marketing:lottery",
+    "methods": [
+      "UserActivityChanceController.increaseUserChances",
+      "UserActivityChanceController.decreaseUserChances",
+      "UserActivityChanceController.batchIncreaseChances"
+    ]
+  },
+  {
+    "code": "marketing:lottery:clear-records",
+    "parent": "marketing:lottery",
+    "methods": ["LotteryRecordController.clearActivityRecords"]
+  },
+  {
+    "code": "marketing:lottery:delete",
+    "parent": "marketing:lottery",
+    "methods": ["LotteryActivityController.deleteActivity"]
+  },
+  {
+    "code": "marketing:lottery:edit",
+    "parent": "marketing:lottery",
+    "methods": ["LotteryActivityController.editActivity"]
+  },
+  {
+    "code": "marketing:lottery:prize",
+    "parent": "marketing:lottery",
+    "methods": [
+      "LotteryPrizeController.addPrize",
+      "LotteryPrizeController.updatePrize",
+      "LotteryPrizeController.togglePrizeStatus",
+      "LotteryPrizeController.deletePrize",
+      "ActivityPrizeController.addPrizeToActivity",
+      "ActivityPrizeController.removePrizeFromActivity",
+      "ActivityPrizeController.removeAllPrizesFromActivity"
+    ]
+  },
+  {
+    "code": "marketing:lottery:status",
+    "parent": "marketing:lottery",
+    "methods": ["LotteryActivityController.toggleActivityStatus"]
+  },
+  {
+    "code": "marketing:lottery:stock",
+    "parent": "marketing:lottery",
+    "methods": [
+      "ActivityPrizeController.increaseInventory",
+      "ActivityPrizeController.decreaseInventory"
+    ]
+  },
+  {
+    "code": "operations:direct-cashier:add-items",
+    "parent": "operations:direct-cashier",
+    "methods": ["RestaurantOrderController.requireOrderAccess"]
+  },
+  {
+    "code": "operations:direct-cashier:cancel",
+    "parent": "operations:direct-cashier",
+    "methods": [
+      "RestaurantOrderController.handlePaymentTimeout",
+      "RestaurantOrderController.handlePaymentError"
+    ]
+  },
+  {
+    "code": "operations:direct-cashier:delete",
+    "parent": "operations:direct-cashier",
+    "methods": [
+      "RestaurantOrderController.deleteOrder",
+      "RestaurantOrderController.batchDeleteOrder"
+    ]
+  },
+  {
+    "code": "operations:direct-cashier:discount",
+    "parent": "operations:direct-cashier",
+    "methods": [
+      "RestaurantOrderServiceImpl.cashierDirectOrder",
+      "RestaurantOrderServiceImpl.cashierSettleSession"
+    ]
+  },
+  {
+    "code": "operations:direct-cashier:gift",
+    "parent": "operations:direct-cashier",
+    "methods": ["RestaurantOrderController.markOrderItemsGift"]
+  },
+  {
+    "code": "operations:direct-cashier:print",
+    "parent": "operations:direct-cashier",
+    "methods": [
+      "OrderPrintController.printOrder",
+      "OrderPrintController.batchPrintOrders",
+      "OrderPrintController.testPrint"
+    ]
+  },
+  {
+    "code": "operations:direct-cashier:refund",
+    "parent": "operations:direct-cashier",
+    "methods": ["RestaurantOrderController.refundDish"]
+  },
+  {
+    "code": "operations:direct-cashier:settle",
+    "parent": "operations:direct-cashier",
+    "methods": [
+      "RestaurantOrderController.cashierScanPay",
+      "RestaurantOrderController.cashierDirectOrder",
+      "RestaurantOrderController.cashierSettleSession"
+    ]
+  },
+  {
+    "code": "operations:direct-cashier:status",
+    "parent": "operations:direct-cashier",
+    "methods": ["RestaurantOrderController.updateOrderStatus"]
+  },
+  {
+    "code": "operations:direct-cashier:verify",
+    "parent": "operations:direct-cashier",
+    "methods": ["VerifyRecordController.verifyCode"]
+  },
+  {
+    "code": "operations:table-cashier:add-items",
+    "parent": "operations:table-cashier",
+    "methods": ["RestaurantOrderController.requireOrderAccess"]
+  },
+  {
+    "code": "operations:table-cashier:cancel",
+    "parent": "operations:table-cashier",
+    "methods": [
+      "RestaurantOrderController.handlePaymentTimeout",
+      "RestaurantOrderController.handlePaymentError"
+    ]
+  },
+  {
+    "code": "operations:table-cashier:clear",
+    "parent": "operations:table-cashier",
+    "methods": [
+      "TableSessionController.clearAllSessions",
+      "TableSessionController.clearSessionsByTables"
+    ]
+  },
+  {
+    "code": "operations:table-cashier:delete",
+    "parent": "operations:table-cashier",
+    "methods": [
+      "RestaurantOrderController.deleteOrder",
+      "RestaurantOrderController.batchDeleteOrder"
+    ]
+  },
+  {
+    "code": "operations:table-cashier:discount",
+    "parent": "operations:table-cashier",
+    "methods": [
+      "RestaurantOrderServiceImpl.cashierDirectOrder",
+      "RestaurantOrderServiceImpl.cashierSettleSession"
+    ]
+  },
+  {
+    "code": "operations:table-cashier:gift",
+    "parent": "operations:table-cashier",
+    "methods": ["RestaurantOrderController.markOrderItemsGift"]
+  },
+  {
+    "code": "operations:table-cashier:open",
+    "parent": "operations:table-cashier",
+    "methods": ["TableSessionController.adminOpenTable"]
+  },
+  {
+    "code": "operations:table-cashier:print",
+    "parent": "operations:table-cashier",
+    "methods": [
+      "OrderPrintController.printOrder",
+      "OrderPrintController.batchPrintOrders",
+      "OrderPrintController.testPrint"
+    ]
+  },
+  {
+    "code": "operations:table-cashier:refund",
+    "parent": "operations:table-cashier",
+    "methods": ["RestaurantOrderController.refundDish"]
+  },
+  {
+    "code": "operations:table-cashier:settle",
+    "parent": "operations:table-cashier",
+    "methods": [
+      "TableSessionController.endSession",
+      "RestaurantOrderController.cashierScanPay",
+      "RestaurantOrderController.cashierDirectOrder",
+      "RestaurantOrderController.cashierSettleSession"
+    ]
+  },
+  {
+    "code": "operations:table-cashier:status",
+    "parent": "operations:table-cashier",
+    "methods": [
+      "TableInfoController.updateTableStatus",
+      "RestaurantOrderController.updateOrderStatus"
+    ]
+  },
+  {
+    "code": "operations:table-cashier:verify",
+    "parent": "operations:table-cashier",
+    "methods": ["VerifyRecordController.verifyCode"]
+  },
+  {
+    "code": "operations:templates:add",
+    "parent": "operations:templates",
+    "methods": ["PrintTemplateController.createTemplate", "PrintTemplateController.copyTemplate"]
+  },
+  {
+    "code": "operations:templates:default",
+    "parent": "operations:templates",
+    "methods": ["PrintTemplateController.setDefaultTemplate"]
+  },
+  {
+    "code": "operations:templates:delete",
+    "parent": "operations:templates",
+    "methods": ["PrintTemplateController.deleteTemplate"]
+  },
+  {
+    "code": "operations:templates:edit",
+    "parent": "operations:templates",
+    "methods": ["PrintTemplateController.updateTemplate"]
+  },
+  {
+    "code": "operations:templates:status",
+    "parent": "operations:templates",
+    "methods": ["PrintTemplateController.updateEnabled"]
+  },
+  {
+    "code": "operations:verify-record:verify",
+    "parent": "operations:verify-record",
+    "methods": ["VerifyRecordController.verifyCode"]
+  },
+  {
+    "code": "restaurant:category:add",
+    "parent": "restaurant:category",
+    "methods": ["DishCategoryController.addCategory"]
+  },
+  {
+    "code": "restaurant:category:delete",
+    "parent": "restaurant:category",
+    "methods": ["DishCategoryController.deleteCategory"]
+  },
+  {
+    "code": "restaurant:category:edit",
+    "parent": "restaurant:category",
+    "methods": ["DishCategoryController.updateCategory"]
+  },
+  {
+    "code": "restaurant:dish:add",
+    "parent": "restaurant:dish",
+    "methods": ["DishController.addDish"]
+  },
+  {
+    "code": "restaurant:dish:delete",
+    "parent": "restaurant:dish",
+    "methods": ["DishController.deleteDish", "DishController.batchDeleteDish"]
+  },
+  {
+    "code": "restaurant:dish:edit",
+    "parent": "restaurant:dish",
+    "methods": ["DishController.updateDish"]
+  },
+  {
+    "code": "restaurant:dish:spec",
+    "parent": "restaurant:dish",
+    "methods": [
+      "DishSpecOptionController.addSpecOption",
+      "DishSpecOptionController.updateSpecOption",
+      "DishSpecOptionController.deleteSpecOption"
+    ]
+  },
+  {
+    "code": "restaurant:order:add-items",
+    "parent": "restaurant:order",
+    "methods": ["RestaurantOrderController.requireOrderAccess"]
+  },
+  {
+    "code": "restaurant:order:cancel",
+    "parent": "restaurant:order",
+    "methods": [
+      "RestaurantOrderController.handlePaymentTimeout",
+      "RestaurantOrderController.handlePaymentError"
+    ]
+  },
+  {
+    "code": "restaurant:order:delete",
+    "parent": "restaurant:order",
+    "methods": [
+      "RestaurantOrderController.deleteOrder",
+      "RestaurantOrderController.batchDeleteOrder"
+    ]
+  },
+  {
+    "code": "restaurant:order:discount",
+    "parent": "restaurant:order",
+    "methods": [
+      "RestaurantOrderServiceImpl.cashierDirectOrder",
+      "RestaurantOrderServiceImpl.cashierSettleSession"
+    ]
+  },
+  {
+    "code": "restaurant:order:gift",
+    "parent": "restaurant:order",
+    "methods": ["RestaurantOrderController.markOrderItemsGift"]
+  },
+  {
+    "code": "restaurant:order:print",
+    "parent": "restaurant:order",
+    "methods": [
+      "OrderPrintController.printOrder",
+      "OrderPrintController.batchPrintOrders",
+      "OrderPrintController.testPrint"
+    ]
+  },
+  {
+    "code": "restaurant:order:refund",
+    "parent": "restaurant:order",
+    "methods": ["RestaurantOrderController.refundDish"]
+  },
+  {
+    "code": "restaurant:order:settle",
+    "parent": "restaurant:order",
+    "methods": [
+      "RestaurantOrderController.cashierScanPay",
+      "RestaurantOrderController.cashierDirectOrder",
+      "RestaurantOrderController.cashierSettleSession"
+    ]
+  },
+  {
+    "code": "restaurant:order:status",
+    "parent": "restaurant:order",
+    "methods": ["RestaurantOrderController.updateOrderStatus"]
+  },
+  {
+    "code": "restaurant:printer:add",
+    "parent": "restaurant:printer",
+    "methods": ["FeieyunCallbackController.addPrinter"]
+  },
+  {
+    "code": "restaurant:printer:delete",
+    "parent": "restaurant:printer",
+    "methods": ["FeieyunCallbackController.deletePrinter"]
+  },
+  {
+    "code": "restaurant:printer:edit",
+    "parent": "restaurant:printer",
+    "methods": ["FeieyunCallbackController.updatePrinter"]
+  },
+  {
+    "code": "restaurant:printer:print",
+    "parent": "restaurant:printer",
+    "methods": [
+      "OrderPrintController.printOrder",
+      "OrderPrintController.batchPrintOrders",
+      "OrderPrintController.testPrint"
+    ]
+  },
+  {
+    "code": "restaurant:printer:status",
+    "parent": "restaurant:printer",
+    "methods": ["FeieyunCallbackController.updatePrinterEnabled"]
+  },
+  {
+    "code": "restaurant:printer:sync",
+    "parent": "restaurant:printer",
+    "methods": ["FeieyunCallbackController.syncAllPrinterStatus"]
+  },
+  {
+    "code": "restaurant:store:add",
+    "parent": "restaurant:store",
+    "methods": ["StoreInfoController.addStore"]
+  },
+  {
+    "code": "restaurant:store:delete",
+    "parent": "restaurant:store",
+    "methods": ["StoreInfoController.deleteStore", "StoreInfoController.deleteStoresBatch"]
+  },
+  {
+    "code": "restaurant:store:edit",
+    "parent": "restaurant:store",
+    "methods": ["StoreInfoController.updateStore"]
+  },
+  {
+    "code": "restaurant:store:status",
+    "parent": "restaurant:store",
+    "methods": ["StoreInfoController.updateStoreStatus"]
+  },
+  {
+    "code": "restaurant:table:add",
+    "parent": "restaurant:table",
+    "methods": ["TableInfoController.addTable"]
+  },
+  {
+    "code": "restaurant:table:clear",
+    "parent": "restaurant:table",
+    "methods": [
+      "TableSessionController.clearAllSessions",
+      "TableSessionController.clearSessionsByTables"
+    ]
+  },
+  {
+    "code": "restaurant:table:delete",
+    "parent": "restaurant:table",
+    "methods": ["TableInfoController.deleteTable", "TableInfoController.batchDeleteTable"]
+  },
+  {
+    "code": "restaurant:table:edit",
+    "parent": "restaurant:table",
+    "methods": ["TableInfoController.updateTable"]
+  },
+  {
+    "code": "restaurant:table:open",
+    "parent": "restaurant:table",
+    "methods": ["TableSessionController.adminOpenTable"]
+  },
+  {
+    "code": "restaurant:table:settle",
+    "parent": "restaurant:table",
+    "methods": ["TableSessionController.endSession"]
+  },
+  {
+    "code": "restaurant:table:status",
+    "parent": "restaurant:table",
+    "methods": ["TableInfoController.updateTableStatus"]
+  },
+  {
+    "code": "system:level:add",
+    "parent": "system:level",
+    "methods": ["UserLevelController.addLevel"]
+  },
+  {
+    "code": "system:level:delete",
+    "parent": "system:level",
+    "methods": ["UserLevelController.deleteLevel"]
+  },
+  {
+    "code": "system:level:edit",
+    "parent": "system:level",
+    "methods": ["UserLevelController.updateLevel"]
+  },
+  {
+    "code": "system:level:scheme-activate",
+    "parent": "system:level",
+    "methods": ["UserLevelSchemeController.activate"]
+  },
+  {
+    "code": "system:level:scheme-add",
+    "parent": "system:level",
+    "methods": [
+      "UserLevelSchemeController.create",
+      "UserLevelSchemeController.useTemplate",
+      "UserLevelSchemeController.useDefault"
+    ]
+  },
+  {
+    "code": "system:level:scheme-delete",
+    "parent": "system:level",
+    "methods": ["UserLevelSchemeController.delete"]
+  },
+  {
+    "code": "system:level:scheme-edit",
+    "parent": "system:level",
+    "methods": ["UserLevelSchemeController.rename"]
+  },
+  {
+    "code": "system:level:status",
+    "parent": "system:level",
+    "methods": ["UserLevelController.updateLevelStatus"]
+  },
+  {
+    "code": "system:role:add",
+    "parent": "system:role",
+    "methods": ["SysRoleController.addRole"]
+  },
+  {
+    "code": "system:role:assign",
+    "parent": "system:role",
+    "methods": [
+      "SysRolePermissionController.listMenuTreeByRole",
+      "SysRolePermissionController.assignPermissions"
+    ]
+  },
+  {
+    "code": "system:role:delete",
+    "parent": "system:role",
+    "methods": ["SysRoleController.deleteRole"]
+  },
+  {
+    "code": "system:role:edit",
+    "parent": "system:role",
+    "methods": ["SysRoleController.updateRole"]
+  },
+  {
+    "code": "system:user-store:assign",
+    "parent": "system:user-store",
+    "methods": ["SysUserStoreController.assignStores"]
+  },
+  {
+    "code": "system:user:add",
+    "parent": "system:user",
+    "methods": ["SysUserController.addUser"]
+  },
+  {
+    "code": "system:user:assign-role",
+    "parent": "system:user",
+    "methods": ["SysUserRoleController.assignRoles"]
+  },
+  {
+    "code": "system:user:delete",
+    "parent": "system:user",
+    "methods": ["SysUserController.deleteUser"]
+  },
+  {
+    "code": "system:user:edit",
+    "parent": "system:user",
+    "methods": ["SysUserController.adminEditUser"]
+  },
+  {
+    "code": "system:user:level",
+    "parent": "system:user",
+    "methods": ["UserLevelController.updateUserLevel"]
+  },
+  {
+    "code": "system:user:points-delete",
+    "parent": "system:user",
+    "methods": ["UserPointsRecordController.deletePointsRecord"]
+  },
+  {
+    "code": "system:user:recharge",
+    "parent": "system:user",
+    "methods": ["SysUserController.rechargeBalance"]
+  },
+  {
+    "code": "system:user:reset-password",
+    "parent": "system:user",
+    "methods": ["SysUserController.adminResetPassword"]
+  }
+]

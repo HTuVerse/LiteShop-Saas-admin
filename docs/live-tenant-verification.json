@@ -1,0 +1,50 @@
+{
+  "date": "2026-09-02T08:13:33.858Z",
+  "results": [
+    {
+      "name": "创建商户时四个默认角色归属正确，包括在已选商户视角创建",
+      "status": "passed"
+    },
+    {
+      "name": "两个商户可创建同名门店编码、配置键和管理账号",
+      "status": "passed"
+    },
+    {
+      "name": "同账号双商户预认证、选择商户和一次性票据防重放",
+      "status": "passed"
+    },
+    {
+      "name": "租户账号不能读取或修改另一商户的门店和用户",
+      "status": "passed"
+    },
+    {
+      "name": "网关清除伪造内部头，直接内部接口拒绝无凭据请求",
+      "status": "passed"
+    },
+    {
+      "name": "公开商户头校验、同名配置缓存隔离和单商户更新",
+      "status": "passed"
+    },
+    {
+      "name": "店员只可见授权门店，同租户跨门店读取和修改被拒绝",
+      "status": "passed"
+    },
+    {
+      "name": "停用商户立即拒绝业务访问，平台账号仍可退出该商户",
+      "status": "passed"
+    }
+  ],
+  "fixturesCleaned": true,
+  "additionalVerification": {
+    "date": "2026-09-03",
+    "backendTestsPassed": 43,
+    "frontendTestsPassed": 10,
+    "backendEndpoints": 277,
+    "frontendCalls": 200,
+    "unmatchedCalls": 0,
+    "productionBuildPassed": true,
+    "messageServiceStarted": true,
+    "unconfiguredMailReturns503": true,
+    "platformEnterAndExitBrowserVerified": true
+  }
+}

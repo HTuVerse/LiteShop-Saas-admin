@@ -1,0 +1,1840 @@
+diff --git a/docs/operation-permissions.md b/docs/operation-permissions.md
+index e69de29..69e85ba 100644
+--- /dev/null
++++ b/docs/operation-permissions.md
+@@ -0,0 +1,30 @@
++# 操作权限说明
++
++菜单权限继续控制页面访问和该页面的基础查询；写入操作使用独立权限码。角色名称及普通业务角色编码不参与操作接口放行判断。平台超级管理员保留显式豁免。租户、门店数据范围及对内置管理员账号的保护仍然生效。
++
++例如 `system:user` 允许查看用户页面，`system:user:edit` 允许编辑，`system:user:delete` 允许删除。`system:user:assign-role`、`system:user:level`、`system:user:reset-password`、`system:user:recharge` 分别控制角色分配、等级调整、密码重置和充值。编辑接口同时校验请求中实际变更的角色和等级，不能通过提交额外字段绕过单独授权。
++
++角色权限树使用真实权限 ID，分别标出菜单、操作和接口。勾选菜单不会自动勾选操作；勾选操作会在保存时补齐所属页面和上级目录，前后端均执行此规则。菜单名称和目录位置可以调整，已接入代码的权限码必须保持一致。
++
++前端 `useAuth().hasAuth(code)`、`v-auth="'完整权限码'"` 和 `ArtButtonTable` 的 `auth` 属性读取后端已授予的权限。多个权限码表示任意一个满足即可，用于收银等共享操作。前端只提供交互控制，后端通过 Sa-Token 独立校验。操作权限变化后，后端下一次权限查询读取最新授权；其他已打开的客户端需刷新页面更新按钮显示。
++
++订单和收银操作分别划分结算、退菜、赠菜、折扣、取消、加菜、状态和打印。其他模块包括门店、餐桌、分类、菜品规格、打印机、模板、优惠券、抽奖、会员等级和配置。编辑请求中变更上下架／启用状态、默认模板以及收银中的赠菜和折扣，也会检查对应操作权限。
++
++共享页面所需的分类、打印机、模板下拉查询允许来自对应使用页面的权限；这些只读授权不会授予新增、删除等写入操作。自定义角色仍需配置其门店数据范围。
++
++## 数据库升级与发布
++
++1. 备份用户数据库；确认已有多租户结构和 01～15 中对应的菜单补丁。
++2. 在 `liteshop_user` 执行 `docs/sql/16_operation_permissions.sql`。脚本先校验父菜单、权限类型、ID 冲突，失败时回滚。
++3. 发布配套后端及前端。不要单独发布前端或只发布后端：旧角色尚无操作权限记录时会看不到按钮或被拒绝操作。
++4. 角色管理 → 分配权限，取消不需要的操作，并用普通自定义角色核验。
++
++首次升级只给新建的操作权限复制原父菜单的角色授权，保留升级前能力；不会自动减少既有角色权限。重跑跳过已有操作权限，不恢复后来撤销的授权。SQL 文件不会自动连接或修改数据库。
++
++权限目录保存在 `docs/operation-permissions.json`，运行 `node scripts/generate-operation-permissions.mjs` 可重新生成升级脚本。新增角色只需配置已有权限；新业务能力仍需同步登记权限码、后端校验和前端操作控件。
++
++## 验证
++
++前端：`npm run typecheck`、`npm run test:integration`、`npm run build`。
++
++后端：`mvn test`。`OperationPermissionTest` 实际调用 Sa-Token 注解校验器，验证菜单权限不能写入、自定义角色按权限放行、ADMIN 无隐式操作权限、SUPER_ADMIN 豁免、撤销立即生效、复合字段隔离及结算与退菜隔离。`PermissionAssignmentTest` 验证选择页面不授予按钮、按钮补齐父级及缺失／停用父级拒绝保存。
+diff --git a/liteShop-common/src/main/java/org/hongtu/config/SaTokenConfigure.java b/liteShop-common/src/main/java/org/hongtu/config/SaTokenConfigure.java
+index 03ee468..16bb869 100644
+--- a/liteShop-common/src/main/java/org/hongtu/config/SaTokenConfigure.java
++++ b/liteShop-common/src/main/java/org/hongtu/config/SaTokenConfigure.java
+@@ -84,8 +84,7 @@ public class SaTokenConfigure implements WebMvcConfigurer {
+                     .notMatch(excludePaths)  // 排除不需要拦截的路径
+                     .check(r -> StpUtil.checkLogin());
+ 
+-            // 角色校验 -- 拦截以 admin 开头的路由，必须具备 admin 角色或者 super-admin 角色才可以通过认证
+-            SaRouter.match("/admin/**", r -> StpUtil.checkRoleOr("ADMIN", "SUPER_ADMIN"));
++            // Business endpoints declare operation permissions with @SaCheckPermission.
+ /*
+             // 权限校验 -- 不同模块校验不同权限
+             SaRouter.match("/user/**", r -> StpUtil.checkPermission("user"));
+diff --git a/liteShop-common/src/main/java/org/hongtu/security/OperationPermission.java b/liteShop-common/src/main/java/org/hongtu/security/OperationPermission.java
+index e69de29..88615fc 100644
+--- /dev/null
++++ b/liteShop-common/src/main/java/org/hongtu/security/OperationPermission.java
+@@ -0,0 +1,22 @@
++package org.hongtu.security;
++
++import cn.dev33.satoken.stp.StpUtil;
++import java.util.Objects;
++
++/** Additional checks for sensitive fields in otherwise permitted composite requests. */
++public final class OperationPermission {
++    private OperationPermission() {}
++
++    public static void requireAny(String... codes) {
++        if (!StpUtil.hasRole("SUPER_ADMIN")) StpUtil.checkPermissionOr(codes);
++    }
++
++    public static void requireChange(String code, Object previous, Object requested) {
++        if (requested != null && !Objects.equals(previous, requested)) requireAny(code);
++    }
++
++    public static void order(String action) {
++        requireAny("restaurant:order:" + action, "operations:direct-cashier:" + action,
++                "operations:table-cashier:" + action, "operations:console:" + action);
++    }
++}
+diff --git a/liteShop-config-service/src/main/java/org/hongtu/config/controller/AppConfigController.java b/liteShop-config-service/src/main/java/org/hongtu/config/controller/AppConfigController.java
+index b61bcd4..1016ae3 100644
+--- a/liteShop-config-service/src/main/java/org/hongtu/config/controller/AppConfigController.java
++++ b/liteShop-config-service/src/main/java/org/hongtu/config/controller/AppConfigController.java
+@@ -124,7 +124,7 @@ public class AppConfigController {
+      * 新增配置
+      */
+     @PostMapping("/admin/add")
+-    @SaCheckPermission(value = {"config:basic"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"config:basic:add"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Boolean> addConfig(@RequestBody AppConfig config) {
+         // 检查配置键是否已存在
+         AppConfig existing = appConfigService.getByConfigKey(config.getConfigKey());
+@@ -148,7 +148,7 @@ public class AppConfigController {
+      * 更新配置
+      */
+     @PutMapping("/admin/update")
+-    @SaCheckPermission(value = {"config:basic"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"config:basic:edit"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Boolean> updateConfig(@RequestBody AppConfig config) {
+         if (config.getId() == null) {
+             return Result.error("配置ID不能为空");
+@@ -172,7 +172,7 @@ public class AppConfigController {
+      * 更新配置值（简化接口）
+      */
+     @PutMapping("/admin/update-value")
+-    @SaCheckPermission(value = {"config:basic"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"config:basic:edit"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Boolean> updateConfigValue(
+             @RequestParam String configKey,
+             @RequestParam String configValue) {
+@@ -185,8 +185,8 @@ public class AppConfigController {
+      * 批量更新配置值
+      */
+     @PutMapping("/admin/batch-update")
+-    @SaCheckPermission(value = {"config:basic"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
+     @org.springframework.transaction.annotation.Transactional(rollbackFor = Exception.class)
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"config:basic:edit"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Boolean> batchUpdateConfigs(@RequestBody Map<String, String> configs) {
+         for (Map.Entry<String, String> entry : configs.entrySet()) {
+             if (!appConfigService.updateConfigValue(entry.getKey(), entry.getValue()))
+@@ -199,7 +199,7 @@ public class AppConfigController {
+      * 删除配置
+      */
+     @DeleteMapping("/admin/delete/{id}")
+-    @SaCheckPermission(value = {"config:basic"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"config:basic:delete"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Boolean> deleteConfig(@PathVariable Long id) {
+         // 检查是否允许删除
+         AppConfig existing = appConfigService.getById(id);
+@@ -218,7 +218,7 @@ public class AppConfigController {
+      * 刷新配置缓存
+      */
+     @PostMapping("/admin/refresh-cache")
+-    @SaCheckPermission(value = {"config:basic"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"config:basic:refresh"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Boolean> refreshCache() {
+         appConfigService.refreshCache();
+         return Result.success(true);
+diff --git a/liteShop-config-service/src/main/java/org/hongtu/config/controller/BannerController.java b/liteShop-config-service/src/main/java/org/hongtu/config/controller/BannerController.java
+index 01540d2..0e5a2d5 100644
+--- a/liteShop-config-service/src/main/java/org/hongtu/config/controller/BannerController.java
++++ b/liteShop-config-service/src/main/java/org/hongtu/config/controller/BannerController.java
+@@ -104,7 +104,7 @@ public class BannerController {
+      * 新增轮播图
+      */
+     @PostMapping("/admin/add")
+-    @SaCheckPermission(value = {"config:banner"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"config:banner:add"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Boolean> addBanner(@RequestBody Banner banner) {
+         banner.setCreatedAt(LocalDateTime.now());
+         banner.setUpdatedAt(LocalDateTime.now());
+@@ -125,11 +125,14 @@ public class BannerController {
+      * 更新轮播图
+      */
+     @PutMapping("/admin/update")
+-    @SaCheckPermission(value = {"config:banner"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"config:banner:edit"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Boolean> updateBanner(@RequestBody Banner banner) {
+         if (banner.getId() == null) {
+             return Result.error("轮播图ID不能为空");
+         }
++        Banner existing = bannerService.getById(banner.getId());
++        if (existing == null) return Result.error("轮播图不存在或无权访问");
++        org.hongtu.security.OperationPermission.requireChange("config:banner:status", existing.getStatus(), banner.getStatus());
+         banner.setUpdatedAt(LocalDateTime.now());
+         boolean success = bannerService.updateById(banner);
+         return success ? Result.success(true) : Result.error("更新失败");
+@@ -139,7 +142,7 @@ public class BannerController {
+      * 删除轮播图
+      */
+     @DeleteMapping("/admin/delete/{id}")
+-    @SaCheckPermission(value = {"config:banner"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"config:banner:delete"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Boolean> deleteBanner(@PathVariable Long id) {
+         boolean success = bannerService.removeById(id);
+         return success ? Result.success(true) : Result.error("删除失败");
+@@ -149,7 +152,7 @@ public class BannerController {
+      * 更新轮播图状态
+      */
+     @PutMapping("/admin/status/{id}")
+-    @SaCheckPermission(value = {"config:banner"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"config:banner:status"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Boolean> updateStatus(@PathVariable Long id, @RequestParam Integer status) {
+         boolean success = bannerService.updateStatus(id, status);
+         return success ? Result.success(true) : Result.error("更新状态失败");
+@@ -159,7 +162,7 @@ public class BannerController {
+      * 更新轮播图排序
+      */
+     @PutMapping("/admin/sort/{id}")
+-    @SaCheckPermission(value = {"config:banner"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"config:banner:edit"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Boolean> updateSortOrder(@PathVariable Long id, @RequestParam Integer sortOrder) {
+         boolean success = bannerService.updateSortOrder(id, sortOrder);
+         return success ? Result.success(true) : Result.error("更新排序失败");
+@@ -169,7 +172,7 @@ public class BannerController {
+      * 批量删除轮播图
+      */
+     @DeleteMapping("/admin/batch-delete")
+-    @SaCheckPermission(value = {"config:banner"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"config:banner:delete"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Boolean> batchDelete(@RequestBody List<Long> ids) {
+         boolean success = bannerService.removeByIds(ids);
+         return success ? Result.success(true) : Result.error("批量删除失败");
+diff --git a/liteShop-coupon-service/src/main/java/org/hongtu/controller/CouponController.java b/liteShop-coupon-service/src/main/java/org/hongtu/controller/CouponController.java
+index e98182b..248bedb 100644
+--- a/liteShop-coupon-service/src/main/java/org/hongtu/controller/CouponController.java
++++ b/liteShop-coupon-service/src/main/java/org/hongtu/controller/CouponController.java
+@@ -74,8 +74,8 @@ public class CouponController {
+      * @param coupon 优惠券信息
+      * @return 创建结果
+      */
+-    @SaCheckPermission(value = {"marketing:coupon"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
+     @PostMapping
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"marketing:coupon:add"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Coupon> createCoupon(@RequestBody Coupon coupon) {
+         try {
+             return couponService.createCoupon(coupon);
+@@ -90,8 +90,8 @@ public class CouponController {
+      * @param coupon 优惠券信息
+      * @return 更新结果
+      */
+-    @SaCheckPermission(value = {"marketing:coupon"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
+     @PutMapping
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"marketing:coupon:edit"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Coupon> updateCoupon(@RequestBody Coupon coupon) {
+         try {
+             return couponService.updateCoupon(coupon);
+@@ -106,8 +106,8 @@ public class CouponController {
+      * @param id 优惠券ID
+      * @return 删除结果
+      */
+-    @SaCheckPermission(value = {"marketing:coupon"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
+     @DeleteMapping("/delete")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"marketing:coupon:delete"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result deleteCoupon(@RequestParam Long id) {
+         try {
+             return couponService.deleteCoupon(id);
+@@ -123,8 +123,8 @@ public class CouponController {
+      * @param id 优惠券ID
+      * @return 操作结果
+      */
+-    @SaCheckPermission(value = {"marketing:coupon"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
+     @PutMapping("/toggle-status")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"marketing:coupon:status"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result toggleStatus(@RequestParam Long id) {
+         try {
+             return couponService.toggleCouponStatus(id);
+diff --git a/liteShop-coupon-service/src/main/java/org/hongtu/controller/UserCouponController.java b/liteShop-coupon-service/src/main/java/org/hongtu/controller/UserCouponController.java
+index 22d635b..c0ba402 100644
+--- a/liteShop-coupon-service/src/main/java/org/hongtu/controller/UserCouponController.java
++++ b/liteShop-coupon-service/src/main/java/org/hongtu/controller/UserCouponController.java
+@@ -59,8 +59,8 @@ public class UserCouponController {
+      * @param expiredTime 过期时间
+      * @return 操作结果
+      */
+-    @SaCheckPermission(value = {"marketing:coupon"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
+     @PostMapping("/send")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"marketing:coupon:send"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result sendCouponToUser(@RequestParam Long userId,
+                                    @RequestParam Long couponId,
+                                    @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss") Date startTime,
+diff --git a/liteShop-coupon-service/src/main/java/org/hongtu/controller/VerifyRecordController.java b/liteShop-coupon-service/src/main/java/org/hongtu/controller/VerifyRecordController.java
+index 88bf78d..b1db8b2 100644
+--- a/liteShop-coupon-service/src/main/java/org/hongtu/controller/VerifyRecordController.java
++++ b/liteShop-coupon-service/src/main/java/org/hongtu/controller/VerifyRecordController.java
+@@ -50,8 +50,8 @@ public class VerifyRecordController {
+      * @param couponCode 优惠券唯一码（15位数字，用户展示二维码的内容）
+      * @return 核销结果（包含优惠券和用户详情）
+      */
+-    @SaCheckPermission(value = {"operations:verify-record", "marketing:coupon", "operations:direct-cashier", "operations:table-cashier"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
+     @PostMapping("/verify")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"operations:verify-record:verify", "marketing:coupon:verify", "operations:direct-cashier:verify", "operations:table-cashier:verify"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<VerifyResultVO> verifyCode(@RequestParam String couponCode) {
+         try {
+             // 获取当前登录的管理员ID
+diff --git a/liteShop-coupon-service/src/main/java/org/hongtu/service/impl/CouponServiceImpl.java b/liteShop-coupon-service/src/main/java/org/hongtu/service/impl/CouponServiceImpl.java
+index 9e58299..32a076f 100644
+--- a/liteShop-coupon-service/src/main/java/org/hongtu/service/impl/CouponServiceImpl.java
++++ b/liteShop-coupon-service/src/main/java/org/hongtu/service/impl/CouponServiceImpl.java
+@@ -126,6 +126,7 @@ public class CouponServiceImpl extends ServiceImpl<CouponMapper, Coupon> impleme
+         if (existCoupon == null) {
+             return Result.error("优惠券不存在");
+         }
++        org.hongtu.security.OperationPermission.requireChange("marketing:coupon:status", existCoupon.getStatus(), coupon.getStatus());
+         // 如果修改了总数，需要同步调整剩余数量
+         if (coupon.getTotalCount() != null && !coupon.getTotalCount().equals(existCoupon.getTotalCount())) {
+             int diff = coupon.getTotalCount() - existCoupon.getTotalCount();
+diff --git a/liteShop-lottery-service/src/main/java/org/hongtu/controller/ActivityPrizeController.java b/liteShop-lottery-service/src/main/java/org/hongtu/controller/ActivityPrizeController.java
+index 540b54f..374cf9a 100644
+--- a/liteShop-lottery-service/src/main/java/org/hongtu/controller/ActivityPrizeController.java
++++ b/liteShop-lottery-service/src/main/java/org/hongtu/controller/ActivityPrizeController.java
+@@ -62,7 +62,7 @@ public class ActivityPrizeController {
+      * 为活动添加奖品（管理员操作）
+      */
+     @PostMapping("/addPrizeToActivity")
+-    @SaCheckPermission(value="marketing:lottery", orRole="SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"marketing:lottery:prize"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Boolean> addPrizeToActivity(@RequestBody ActivityPrize activityPrize) {
+         // 参数校验
+         if (activityPrize == null) {
+@@ -81,7 +81,7 @@ public class ActivityPrizeController {
+      * 从活动中移除奖品（管理员操作）
+      */
+     @DeleteMapping("/removePrizeFromActivity")
+-    @SaCheckPermission(value="marketing:lottery", orRole="SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"marketing:lottery:prize"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Boolean> removePrizeFromActivity(@RequestParam Long activityId, @RequestParam Long prizeId) {
+         // 参数校验
+         if (activityId == null || activityId <= 0) {
+@@ -107,7 +107,7 @@ public class ActivityPrizeController {
+      * 从活动中移除所有奖品（管理员操作）
+      */
+     @DeleteMapping("/removeAllPrizesFromActivity")
+-    @SaCheckPermission(value="marketing:lottery", orRole="SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"marketing:lottery:prize"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Boolean> removeAllPrizesFromActivity(@RequestParam Long activityId) {
+         // 参数校验
+         if (activityId == null || activityId <= 0) {
+@@ -129,7 +129,7 @@ public class ActivityPrizeController {
+      * 增加库存（管理员操作）
+      */
+     @PostMapping("/increaseInventory")
+-    @SaCheckPermission(value="marketing:lottery", orRole="SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"marketing:lottery:stock"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Boolean> increaseInventory(@RequestParam Long activityId,
+                                              @RequestParam Long prizeId,
+                                              @RequestParam Long amount) {
+@@ -157,7 +157,7 @@ public class ActivityPrizeController {
+      * 注意：此操作会同时减少总库存和剩余库存
+      */
+     @PostMapping("/deductInventory")
+-    @SaCheckPermission(value="marketing:lottery", orRole="SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"marketing:lottery:stock"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Boolean> decreaseInventory(@RequestParam Long activityId,
+                                              @RequestParam Long prizeId,
+                                              @RequestParam Long amount) {
+diff --git a/liteShop-lottery-service/src/main/java/org/hongtu/controller/LotteryActivityController.java b/liteShop-lottery-service/src/main/java/org/hongtu/controller/LotteryActivityController.java
+index 171bc14..e2d6ea6 100644
+--- a/liteShop-lottery-service/src/main/java/org/hongtu/controller/LotteryActivityController.java
++++ b/liteShop-lottery-service/src/main/java/org/hongtu/controller/LotteryActivityController.java
+@@ -65,7 +65,7 @@ public class LotteryActivityController {
+      * 新增抽奖活动
+      */
+     @PostMapping("/add")
+-    @SaCheckPermission(value = {"marketing:lottery"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"marketing:lottery:add"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Boolean> addActivity(@RequestBody LotteryActivity activity) {
+         return lotteryActivityService.addActivity(activity);
+     }
+@@ -74,7 +74,7 @@ public class LotteryActivityController {
+      * 编辑活动（完整编辑）
+      */
+     @PutMapping("/editActivity")
+-    @SaCheckPermission(value = {"marketing:lottery"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"marketing:lottery:edit"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Boolean> editActivity(@RequestBody LotteryActivity activity) {
+         return lotteryActivityService.editActivity(activity);
+     }
+@@ -83,7 +83,7 @@ public class LotteryActivityController {
+      * 切换活动状态（启用/禁用）
+      */
+     @PutMapping("/toggleActivityStatus")
+-    @SaCheckPermission(value = {"marketing:lottery"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"marketing:lottery:status"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Boolean> toggleActivityStatus(@RequestParam Long activityId) {
+         return lotteryActivityService.toggleActivityStatus(activityId);
+     }
+@@ -92,7 +92,7 @@ public class LotteryActivityController {
+      * 删除活动
+      */
+     @DeleteMapping("/deleteActivity")
+-    @SaCheckPermission(value = {"marketing:lottery"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"marketing:lottery:delete"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Boolean> deleteActivity(@RequestParam Long activityId) {
+         return lotteryActivityService.deleteActivity(activityId);
+     }
+diff --git a/liteShop-lottery-service/src/main/java/org/hongtu/controller/LotteryPrizeController.java b/liteShop-lottery-service/src/main/java/org/hongtu/controller/LotteryPrizeController.java
+index 2d7c5af..f530c71 100644
+--- a/liteShop-lottery-service/src/main/java/org/hongtu/controller/LotteryPrizeController.java
++++ b/liteShop-lottery-service/src/main/java/org/hongtu/controller/LotteryPrizeController.java
+@@ -68,7 +68,7 @@ public class LotteryPrizeController {
+      * 添加奖品
+      */
+     @PostMapping("/addPrize")
+-    @SaCheckPermission(value = {"marketing:lottery"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"marketing:lottery:prize"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Boolean> addPrize(@RequestBody LotteryPrize prize) {
+         prize.setCreateTime(LocalDateTime.now());
+         prize.setUpdateTime(LocalDateTime.now());
+@@ -85,7 +85,7 @@ public class LotteryPrizeController {
+      * 更新奖品
+      */
+     @PutMapping("/updatePrize")
+-    @SaCheckPermission(value = {"marketing:lottery"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"marketing:lottery:prize"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Boolean> updatePrize(@RequestBody LotteryPrize prize) {
+         prize.setUpdateTime(LocalDateTime.now());
+ 
+@@ -101,7 +101,7 @@ public class LotteryPrizeController {
+      * 启用/禁用奖品（自动切换状态）
+      */
+     @PutMapping("/togglePrizeStatus")
+-    @SaCheckPermission(value = {"marketing:lottery"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"marketing:lottery:prize"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Boolean> togglePrizeStatus(@RequestParam Long id) {
+         // 先查询当前奖品
+         LotteryPrize existingPrize = lotteryPrizeService.getById(id);
+@@ -127,7 +127,7 @@ public class LotteryPrizeController {
+      * 删除奖品
+      */
+     @DeleteMapping("/delete")
+-    @SaCheckPermission(value = {"marketing:lottery"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"marketing:lottery:prize"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Boolean> deletePrize(@RequestParam Long id) {
+         boolean success = lotteryPrizeService.removeById(id);
+         if (success) {
+diff --git a/liteShop-lottery-service/src/main/java/org/hongtu/controller/LotteryRecordController.java b/liteShop-lottery-service/src/main/java/org/hongtu/controller/LotteryRecordController.java
+index eb9fafb..80acb60 100644
+--- a/liteShop-lottery-service/src/main/java/org/hongtu/controller/LotteryRecordController.java
++++ b/liteShop-lottery-service/src/main/java/org/hongtu/controller/LotteryRecordController.java
+@@ -166,7 +166,7 @@ public class LotteryRecordController {
+      * 管理员清空指定活动的所有抽奖记录
+      */
+     @DeleteMapping("/clearActivityRecords")
+-    @SaCheckPermission(value = {"marketing:lottery"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"marketing:lottery:clear-records"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Boolean> clearActivityRecords(@RequestParam Long activityId) {
+         // 参数校验
+         if (activityId == null || activityId <= 0) {
+diff --git a/liteShop-lottery-service/src/main/java/org/hongtu/controller/UserActivityChanceController.java b/liteShop-lottery-service/src/main/java/org/hongtu/controller/UserActivityChanceController.java
+index f2d82dd..c2a7ec3 100644
+--- a/liteShop-lottery-service/src/main/java/org/hongtu/controller/UserActivityChanceController.java
++++ b/liteShop-lottery-service/src/main/java/org/hongtu/controller/UserActivityChanceController.java
+@@ -51,7 +51,7 @@ public class UserActivityChanceController {
+      * 增加用户抽奖次数（管理员操作）
+      */
+     @PostMapping("/increaseUserChances")
+-    @SaCheckPermission(value="marketing:lottery", orRole="SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"marketing:lottery:chance"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Boolean> increaseUserChances(@RequestParam Long userId,
+                                                @RequestParam Long activityId,
+                                                @RequestParam Integer chances) {
+@@ -67,7 +67,7 @@ public class UserActivityChanceController {
+      * 减少用户抽奖次数（管理员操作）
+      */
+     @PostMapping("/decreaseUserChances")
+-    @SaCheckPermission(value="marketing:lottery", orRole="SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"marketing:lottery:chance"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Boolean> decreaseUserChances(@RequestParam Long userId,
+                                                @RequestParam Long activityId,
+                                                @RequestParam Integer chances) {
+@@ -100,7 +100,7 @@ public class UserActivityChanceController {
+      * @param userIds    用户ID列表（allUsers为false时必填）
+      */
+     @PostMapping("/batchIncreaseChances")
+-    @SaCheckPermission(value="marketing:lottery", orRole="SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"marketing:lottery:chance"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Boolean> batchIncreaseChances(
+             @RequestParam Long activityId,
+             @RequestParam Integer chances,
+diff --git a/liteShop-lottery-service/src/main/java/org/hongtu/service/impl/LotteryActivityServiceImpl.java b/liteShop-lottery-service/src/main/java/org/hongtu/service/impl/LotteryActivityServiceImpl.java
+index 27fe051..c4cef80 100644
+--- a/liteShop-lottery-service/src/main/java/org/hongtu/service/impl/LotteryActivityServiceImpl.java
++++ b/liteShop-lottery-service/src/main/java/org/hongtu/service/impl/LotteryActivityServiceImpl.java
+@@ -69,6 +69,7 @@ public class LotteryActivityServiceImpl extends ServiceImpl<LotteryActivityMappe
+             return Result.error("活动不存在");
+         }
+ 
++        org.hongtu.security.OperationPermission.requireChange("marketing:lottery:status", existActivity.getStatus(), activity.getStatus());
+         activity.setUpdateTime(LocalDateTime.now());
+         boolean success = updateById(activity);
+         if (success) {
+diff --git a/liteShop-restaurant-service/src/main/java/org/hongtu/restaurant/controller/DishCategoryController.java b/liteShop-restaurant-service/src/main/java/org/hongtu/restaurant/controller/DishCategoryController.java
+index 9c96b01..3a22c6b 100644
+--- a/liteShop-restaurant-service/src/main/java/org/hongtu/restaurant/controller/DishCategoryController.java
++++ b/liteShop-restaurant-service/src/main/java/org/hongtu/restaurant/controller/DishCategoryController.java
+@@ -44,7 +44,7 @@ public class DishCategoryController {
+      * @return 结果
+      */
+     @PostMapping("/add")
+-    @SaCheckPermission(value = {"restaurant:category"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"restaurant:category:add"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Boolean> addCategory(@RequestBody DishCategory category) {
+         storeDataScopeService.checkStoreAccess(category.getStoreId());
+         // 设置初始值
+@@ -62,7 +62,7 @@ public class DishCategoryController {
+      * @return 结果
+      */
+     @PutMapping("/update")
+-    @SaCheckPermission(value = {"restaurant:category"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"restaurant:category:edit"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Boolean> updateCategory(@RequestBody DishCategory category) {
+         storeDataScopeService.checkStoreAccess(category.getStoreId());
+         category.setUpdatedAt(LocalDateTime.now());
+@@ -80,7 +80,7 @@ public class DishCategoryController {
+      * @return 结果
+      */
+     @DeleteMapping("/delete/{id}")
+-    @SaCheckPermission(value = {"restaurant:category"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"restaurant:category:delete"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Boolean> deleteCategory(@PathVariable Long id) {
+ 
+         // 检查该分类下是否存在菜品
+@@ -124,7 +124,7 @@ public class DishCategoryController {
+      * @return 分页结果
+      */
+     @GetMapping("/pageList")
+-    @SaCheckPermission(value = {"restaurant:category"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @SaCheckPermission(value = {"restaurant:category", "restaurant:dish", "operations:direct-cashier", "operations:table-cashier"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Page<DishCategory>> getCategoryPage(
+             @RequestParam(defaultValue = "1") Integer currentPage,
+             @RequestParam(defaultValue = "10") Integer pageSize,
+diff --git a/liteShop-restaurant-service/src/main/java/org/hongtu/restaurant/controller/DishController.java b/liteShop-restaurant-service/src/main/java/org/hongtu/restaurant/controller/DishController.java
+index 6dab73d..b4210fb 100644
+--- a/liteShop-restaurant-service/src/main/java/org/hongtu/restaurant/controller/DishController.java
++++ b/liteShop-restaurant-service/src/main/java/org/hongtu/restaurant/controller/DishController.java
+@@ -49,7 +49,7 @@ public class DishController {
+      * @return 结果
+      */
+     @PostMapping("/add")
+-    @SaCheckPermission(value = {"restaurant:dish"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"restaurant:dish:add"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Boolean> addDish(@RequestBody Dish dish) {
+         boolean result = dishService.addDish(dish);
+         if (result) {
+@@ -65,7 +65,7 @@ public class DishController {
+      * @return 结果
+      */
+     @PutMapping("/update")
+-    @SaCheckPermission(value = {"restaurant:dish"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"restaurant:dish:edit"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Boolean> updateDish(@RequestBody Dish dish) {
+         boolean result = dishService.updateDish(dish);
+         if (result) {
+@@ -81,7 +81,7 @@ public class DishController {
+      * @return 结果
+      */
+     @DeleteMapping("/delete/{id}")
+-    @SaCheckPermission(value = {"restaurant:dish"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"restaurant:dish:delete"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Boolean> deleteDish(@PathVariable Long id) {
+         boolean result = dishService.deleteDish(id);
+         if (result) {
+@@ -97,7 +97,7 @@ public class DishController {
+      * @return 结果
+      */
+     @DeleteMapping("/batchDelete")
+-    @SaCheckPermission(value = {"restaurant:dish"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"restaurant:dish:delete"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Boolean> batchDeleteDish(@RequestBody List<Long> ids) {
+         boolean result = dishService.batchDeleteDish(ids);
+         if (result) {
+diff --git a/liteShop-restaurant-service/src/main/java/org/hongtu/restaurant/controller/DishSpecOptionController.java b/liteShop-restaurant-service/src/main/java/org/hongtu/restaurant/controller/DishSpecOptionController.java
+index 80f736d..190c03e 100644
+--- a/liteShop-restaurant-service/src/main/java/org/hongtu/restaurant/controller/DishSpecOptionController.java
++++ b/liteShop-restaurant-service/src/main/java/org/hongtu/restaurant/controller/DishSpecOptionController.java
+@@ -39,7 +39,7 @@ public class DishSpecOptionController {
+      * @return 结果
+      */
+     @PostMapping("/add")
+-    @SaCheckPermission(value = {"restaurant:dish"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"restaurant:dish:spec"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Boolean> addSpecOption(@RequestBody DishSpecOptionRequest request) {
+         // 验证规格值列表
+         validateSpecValues(request.getSpecValueList());
+@@ -65,7 +65,7 @@ public class DishSpecOptionController {
+      * @return 结果
+      */
+     @PutMapping("/update")
+-    @SaCheckPermission(value = {"restaurant:dish"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"restaurant:dish:spec"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Boolean> updateSpecOption(@RequestBody DishSpecOption dishSpecOption) {
+         // 验证ID
+         if (dishSpecOption.getId() == null) {
+@@ -97,7 +97,7 @@ public class DishSpecOptionController {
+      * @return 结果
+      */
+     @DeleteMapping("/delete/{id}")
+-    @SaCheckPermission(value = {"restaurant:dish"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"restaurant:dish:spec"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Boolean> deleteSpecOption(@PathVariable Long id) {
+         DishSpecOption existing = dishSpecOptionService.getById(id);
+         if (existing == null) {
+diff --git a/liteShop-restaurant-service/src/main/java/org/hongtu/restaurant/controller/FeieyunCallbackController.java b/liteShop-restaurant-service/src/main/java/org/hongtu/restaurant/controller/FeieyunCallbackController.java
+index e1e6148..ce57cf0 100644
+--- a/liteShop-restaurant-service/src/main/java/org/hongtu/restaurant/controller/FeieyunCallbackController.java
++++ b/liteShop-restaurant-service/src/main/java/org/hongtu/restaurant/controller/FeieyunCallbackController.java
+@@ -67,7 +67,7 @@ public class FeieyunCallbackController {
+      * @return 添加结果
+      */
+     @PostMapping("/printer/add")
+-    @SaCheckPermission(value = {"restaurant:printer"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"restaurant:printer:add"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Map<String, Object>> addPrinter(@RequestBody PrinterInfo printerInfo) {
+         log.info("添加打印机请求：sn={}, remark={}", printerInfo.getSn(), printerInfo.getRemark());
+ 
+@@ -153,7 +153,7 @@ public class FeieyunCallbackController {
+      * @return 打印机列表
+      */
+     @GetMapping("/printer/listByStore/{storeId}")
+-    @SaCheckPermission(value = {"restaurant:printer"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @SaCheckPermission(value = {"restaurant:printer", "operations:templates", "restaurant:order", "operations:direct-cashier", "operations:table-cashier"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<List<PrinterInfo>> getPrinterListByStore(@PathVariable("storeId") Long storeId) {
+         log.info("根据门店ID查询打印机列表：storeId={}", storeId);
+ 
+@@ -197,7 +197,7 @@ public class FeieyunCallbackController {
+      * @return 更新结果
+      */
+     @PutMapping("/printer/update")
+-    @SaCheckPermission(value = {"restaurant:printer"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"restaurant:printer:edit"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Boolean> updatePrinter(@RequestBody PrinterInfo printerInfo) {
+         log.info("更新打印机信息：id={}", printerInfo.getId());
+ 
+@@ -217,7 +217,7 @@ public class FeieyunCallbackController {
+      * @return 删除结果
+      */
+     @DeleteMapping("/printer/delete/{id}")
+-    @SaCheckPermission(value = {"restaurant:printer"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"restaurant:printer:delete"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Boolean> deletePrinter(@PathVariable("id") Long id) {
+         log.info("删除打印机：id={}", id);
+ 
+@@ -239,7 +239,7 @@ public class FeieyunCallbackController {
+      * @return 操作结果
+      */
+     @PutMapping("/printer/updateEnabled")
+-    @SaCheckPermission(value = {"restaurant:printer"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"restaurant:printer:status"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Boolean> updatePrinterEnabled(
+             @RequestParam("id") Long id,
+             @RequestParam("enabled") Integer enabled) {
+@@ -260,7 +260,7 @@ public class FeieyunCallbackController {
+      * @return 同步结果
+      */
+     @PostMapping("/printer/syncAllStatus")
+-    @SaCheckPermission(value = {"restaurant:printer"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"restaurant:printer:sync"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Map<String, Object>> syncAllPrinterStatus() {
+         log.info("同步所有打印机状态");
+ 
+diff --git a/liteShop-restaurant-service/src/main/java/org/hongtu/restaurant/controller/OrderPrintController.java b/liteShop-restaurant-service/src/main/java/org/hongtu/restaurant/controller/OrderPrintController.java
+index 1def170..a803833 100644
+--- a/liteShop-restaurant-service/src/main/java/org/hongtu/restaurant/controller/OrderPrintController.java
++++ b/liteShop-restaurant-service/src/main/java/org/hongtu/restaurant/controller/OrderPrintController.java
+@@ -32,7 +32,7 @@ public class OrderPrintController {
+      * @return 打印结果
+      */
+     @PostMapping("/printByOrderId")
+-    @SaCheckPermission(value = {"restaurant:printer", "restaurant:order", "operations:direct-cashier", "operations:table-cashier"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"restaurant:printer:print", "restaurant:order:print", "operations:direct-cashier:print", "operations:table-cashier:print"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Map<String, Object>> printOrder(
+             @RequestParam("orderId") Long orderId,
+             @RequestParam(required = false) Long printerId,
+@@ -63,7 +63,7 @@ public class OrderPrintController {
+      * @return 批量打印结果统计
+      */
+     @PostMapping("/batchPrint")
+-    @SaCheckPermission(value = {"restaurant:printer", "restaurant:order", "operations:direct-cashier", "operations:table-cashier"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"restaurant:printer:print", "restaurant:order:print", "operations:direct-cashier:print", "operations:table-cashier:print"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Map<String, Object>> batchPrintOrders(
+             @RequestBody Long[] orderIds,
+             @RequestParam(value = "printerId", required = false) Long printerId) {
+@@ -87,7 +87,7 @@ public class OrderPrintController {
+      * @return 测试打印结果
+      */
+     @PostMapping("/test/{printerId}")
+-    @SaCheckPermission(value = {"restaurant:printer", "restaurant:order", "operations:direct-cashier", "operations:table-cashier"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"restaurant:printer:print", "restaurant:order:print", "operations:direct-cashier:print", "operations:table-cashier:print"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Map<String, Object>> testPrint(
+             @PathVariable("printerId") Long printerId,
+             @RequestParam(value = "templateId", required = false) Long templateId) {
+diff --git a/liteShop-restaurant-service/src/main/java/org/hongtu/restaurant/controller/PrintTemplateController.java b/liteShop-restaurant-service/src/main/java/org/hongtu/restaurant/controller/PrintTemplateController.java
+index 10e16a7..77f7a2e 100644
+--- a/liteShop-restaurant-service/src/main/java/org/hongtu/restaurant/controller/PrintTemplateController.java
++++ b/liteShop-restaurant-service/src/main/java/org/hongtu/restaurant/controller/PrintTemplateController.java
+@@ -34,7 +34,7 @@ public class PrintTemplateController {
+      * @return 分页结果
+      */
+     @GetMapping("/page")
+-    @SaCheckPermission(value = {"operations:templates"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @SaCheckPermission(value = {"operations:templates", "restaurant:printer", "restaurant:order", "operations:direct-cashier", "operations:table-cashier"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Page<PrintTemplate>> getTemplatePage(
+             @RequestParam(value = "currentPage", defaultValue = "1") Integer currentPage,
+             @RequestParam(value = "pageSize", defaultValue = "10") Integer pageSize,
+@@ -60,7 +60,7 @@ public class PrintTemplateController {
+      * @return 模板信息
+      */
+     @GetMapping("/getTemplateById")
+-    @SaCheckPermission(value = {"operations:templates"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @SaCheckPermission(value = {"operations:templates", "restaurant:printer", "restaurant:order", "operations:direct-cashier", "operations:table-cashier"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<PrintTemplate> getTemplateById(@RequestParam("id") Long id) {
+         log.info("根据ID查询打印模板：id={}", id);
+ 
+@@ -84,7 +84,7 @@ public class PrintTemplateController {
+      * @return 模板信息
+      */
+     @GetMapping("/getTemplateByStore")
+-    @SaCheckPermission(value = {"operations:templates"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @SaCheckPermission(value = {"operations:templates", "restaurant:printer", "restaurant:order", "operations:direct-cashier", "operations:table-cashier"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<PrintTemplate> getTemplateByStore(
+             @RequestParam("storeId") Long storeId) {
+ 
+@@ -105,7 +105,7 @@ public class PrintTemplateController {
+      * @return 默认模板
+      */
+     @GetMapping("/getDefaultTemplate")
+-    @SaCheckPermission(value = {"operations:templates"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @SaCheckPermission(value = {"operations:templates", "restaurant:printer", "restaurant:order", "operations:direct-cashier", "operations:table-cashier"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<PrintTemplate> getDefaultTemplate() {
+         log.info("获取默认打印模板");
+ 
+@@ -129,7 +129,7 @@ public class PrintTemplateController {
+      * @return 创建结果
+      */
+     @PostMapping("/create")
+-    @SaCheckPermission(value = {"operations:templates"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"operations:templates:add"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Boolean> createTemplate(@RequestBody PrintTemplate template) {
+         log.info("创建打印模板：{}", template.getTemplateName());
+ 
+@@ -149,7 +149,7 @@ public class PrintTemplateController {
+      * @return 更新结果
+      */
+     @PutMapping("/update")
+-    @SaCheckPermission(value = {"operations:templates"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"operations:templates:edit"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Boolean> updateTemplate(@RequestBody PrintTemplate template) {
+         log.info("更新打印模板：id={}", template.getId());
+ 
+@@ -169,7 +169,7 @@ public class PrintTemplateController {
+      * @return 删除结果
+      */
+     @DeleteMapping("/delete/{id}")
+-    @SaCheckPermission(value = {"operations:templates"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"operations:templates:delete"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Boolean> deleteTemplate(@PathVariable("id") Long id) {
+         log.info("删除打印模板：id={}", id);
+ 
+@@ -189,7 +189,7 @@ public class PrintTemplateController {
+      * @return 操作结果
+      */
+     @PutMapping("/setDefault")
+-    @SaCheckPermission(value = {"operations:templates"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"operations:templates:default"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Boolean> setDefaultTemplate(@RequestParam("id") Long id) {
+         log.info("设置默认模板：id={}", id);
+ 
+@@ -210,7 +210,7 @@ public class PrintTemplateController {
+      * @return 操作结果
+      */
+     @PutMapping("/updateEnabled")
+-    @SaCheckPermission(value = {"operations:templates"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"operations:templates:status"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Boolean> updateEnabled(
+             @RequestParam("id") Long id,
+             @RequestParam("enabled") Integer enabled) {
+@@ -233,7 +233,7 @@ public class PrintTemplateController {
+      * @return 新模板
+      */
+     @PostMapping("/copy")
+-    @SaCheckPermission(value = {"operations:templates"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"operations:templates:add"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<PrintTemplate> copyTemplate(
+             @RequestParam("id") Long id,
+             @RequestParam("newTemplateName") String newTemplateName) {
+diff --git a/liteShop-restaurant-service/src/main/java/org/hongtu/restaurant/controller/RestaurantOrderController.java b/liteShop-restaurant-service/src/main/java/org/hongtu/restaurant/controller/RestaurantOrderController.java
+index f58f836..9699962 100644
+--- a/liteShop-restaurant-service/src/main/java/org/hongtu/restaurant/controller/RestaurantOrderController.java
++++ b/liteShop-restaurant-service/src/main/java/org/hongtu/restaurant/controller/RestaurantOrderController.java
+@@ -104,7 +104,7 @@ public class RestaurantOrderController {
+                 return Result.error("追加的菜品列表不能为空");
+             }
+ 
+-            requireOrderAccess(request.getOrderId(), request.getSessionNo());
++            requireOrderAccess(request.getOrderId(), request.getSessionNo(), "add-items");
+ 
+             // 验证会话（如果提供）
+             if (request.getSessionNo() != null && !request.getSessionNo().isEmpty()) {
+@@ -152,7 +152,7 @@ public class RestaurantOrderController {
+      * @return 退菜结果（包含退款金额、更新后的订单信息）
+      */
+     @PostMapping("/refundDish")
+-    @SaCheckPermission(value = {"restaurant:order", "operations:direct-cashier", "operations:table-cashier", "operations:console"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"restaurant:order:refund", "operations:direct-cashier:refund", "operations:table-cashier:refund", "operations:console:refund"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<RefundDishVO> refundDish(@RequestBody RefundDishRequest request) {
+         try {
+             // 参数校验
+@@ -217,7 +217,7 @@ public class RestaurantOrderController {
+      * @return 更新后的订单信息
+      */
+     @PostMapping("/markOrderItemsGift")
+-    @SaCheckPermission(value = {"restaurant:order", "operations:direct-cashier", "operations:table-cashier", "operations:console"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"restaurant:order:gift", "operations:direct-cashier:gift", "operations:table-cashier:gift", "operations:console:gift"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<RestaurantOrderVO> markOrderItemsGift(@RequestBody MarkOrderItemsGiftRequest request) {
+         try {
+             if (request.getOrderId() == null) {
+@@ -276,7 +276,7 @@ public class RestaurantOrderController {
+      * @return 结果
+      */
+     @PutMapping("/updateStatus")
+-    @SaCheckPermission(value = {"restaurant:order", "operations:direct-cashier", "operations:table-cashier", "operations:console"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"restaurant:order:status", "operations:direct-cashier:status", "operations:table-cashier:status", "operations:console:status"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Boolean> updateOrderStatus(@RequestParam Long orderId, @RequestParam Integer status) {
+         try {
+             OrderStatusEnum statusEnum = OrderStatusEnum.getByCode(status);
+@@ -301,7 +301,7 @@ public class RestaurantOrderController {
+     public Result<Boolean> cancelOrder(@RequestParam Long orderId,
+                                        @RequestParam(required = false) String cancelReason) {
+         try {
+-            requireOrderAccess(orderId, null);
++            requireOrderAccess(orderId, null, "cancel");
+             boolean success = restaurantOrderService.cancelOrder(orderId, cancelReason);
+             return success ? Result.success("取消订单成功", true) : Result.error("取消订单失败");
+         } catch (Exception e) {
+@@ -324,7 +324,7 @@ public class RestaurantOrderController {
+             if (request.getOrderId() == null) {
+                 return Result.error("订单ID不能为空");
+             }
+-            requireOrderAccess(request.getOrderId(), null);
++            requireOrderAccess(request.getOrderId(), null, "settle");
+             if (request.getPaymentType() == null) {
+                 return Result.error("支付方式不能为空");
+             }
+@@ -376,7 +376,7 @@ public class RestaurantOrderController {
+             if (orderId == null) {
+                 return Result.error("订单ID不能为空");
+             }
+-            requireOrderAccess(orderId, null);
++            requireOrderAccess(orderId, null, "");
+ 
+             // 调用业务层处理
+             PaymentStatusVO statusInfo = restaurantOrderService.getPaymentStatus(orderId);
+@@ -405,7 +405,7 @@ public class RestaurantOrderController {
+             if (orderId == null) {
+                 return Result.error("订单ID不能为空");
+             }
+-            requireOrderAccess(orderId, null);
++            requireOrderAccess(orderId, null, "settle");
+ 
+             // 调用业务层处理
+             boolean isPaid = restaurantOrderService.queryAndUpdatePaymentStatus(orderId);
+@@ -519,7 +519,7 @@ public class RestaurantOrderController {
+      * @return 处理结果
+      */
+     @PostMapping("/payTimeOut")
+-    @SaCheckPermission(value = {"restaurant:order", "operations:direct-cashier", "operations:table-cashier", "operations:console"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"restaurant:order:cancel", "operations:direct-cashier:cancel", "operations:table-cashier:cancel", "operations:console:cancel"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Boolean> handlePaymentTimeout(@RequestParam Long orderId,
+                                                 @RequestParam(required = false) String reason) {
+         try {
+@@ -547,7 +547,7 @@ public class RestaurantOrderController {
+      * @return 处理结果
+      */
+     @PostMapping("/payError")
+-    @SaCheckPermission(value = {"restaurant:order", "operations:direct-cashier", "operations:table-cashier", "operations:console"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"restaurant:order:cancel", "operations:direct-cashier:cancel", "operations:table-cashier:cancel", "operations:console:cancel"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Boolean> handlePaymentError(@RequestParam Long orderId,
+                                               @RequestParam(required = false) String reason) {
+         try {
+@@ -572,7 +572,7 @@ public class RestaurantOrderController {
+      * @return 结果
+      */
+     @DeleteMapping("/delete")
+-    @SaCheckPermission(value = {"restaurant:order", "operations:direct-cashier", "operations:table-cashier", "operations:console"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"restaurant:order:delete", "operations:direct-cashier:delete", "operations:table-cashier:delete", "operations:console:delete"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Boolean> deleteOrder(@RequestParam Long id) {
+         try {
+             boolean success = restaurantOrderService.removeById(id);
+@@ -589,7 +589,7 @@ public class RestaurantOrderController {
+      * @return 结果
+      */
+     @DeleteMapping("/batchDelete")
+-    @SaCheckPermission(value = {"restaurant:order", "operations:direct-cashier", "operations:table-cashier", "operations:console"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"restaurant:order:delete", "operations:direct-cashier:delete", "operations:table-cashier:delete", "operations:console:delete"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Boolean> batchDeleteOrder(@RequestBody List<Long> ids) {
+         try {
+             if (ids == null || ids.isEmpty()) {
+@@ -690,7 +690,7 @@ public class RestaurantOrderController {
+             return Result.error("订单ID不能为空");
+         }
+         try {
+-            requireOrderAccess(orderId, null);
++            requireOrderAccess(orderId, null, "");
+             RestaurantOrderVO orderDetail = restaurantOrderService.getOrderDetail(orderId);
+             return Result.success("查询订单详情成功", orderDetail);
+         } catch (Exception e) {
+@@ -734,12 +734,14 @@ public class RestaurantOrderController {
+      * 普通用户只能操作自己的订单；桌台共享操作必须同时提供并匹配有效会话号。
+      * 管理员仍需先通过 MyBatis 的 tenant_id / store_id 数据范围过滤。
+      */
+-    private void requireOrderAccess(Long orderId, String sessionNo) {
++    private void requireOrderAccess(Long orderId, String sessionNo, String operation) {
+         RestaurantOrder order = restaurantOrderService.getById(orderId);
+         if (order == null) {
+             throw new IllegalArgumentException("订单不存在或无权访问");
+         }
+-        if (StpUtil.hasRole("ADMIN") || StpUtil.hasRole("SUPER_ADMIN")) {
++        if (StpUtil.hasRole("SUPER_ADMIN") || java.util.List.of(
++                "restaurant:order", "operations:direct-cashier", "operations:table-cashier", "operations:console")
++                .stream().anyMatch(code -> StpUtil.hasPermission(operation.isEmpty() ? code : code + ":" + operation))) {
+             return;
+         }
+ 
+@@ -774,7 +776,7 @@ public class RestaurantOrderController {
+      * @return 支付参数（用于扫码或轮询支付状态）
+      */
+     @PostMapping("/cashier/scanPay")
+-    @SaCheckPermission(value = {"restaurant:order", "operations:direct-cashier", "operations:table-cashier", "operations:console"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"restaurant:order:settle", "operations:direct-cashier:settle", "operations:table-cashier:settle", "operations:console:settle"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Map<String, Object>> cashierScanPay(@RequestBody CashierOrderRequest request) {
+         try {
+             // 参数校验
+@@ -822,7 +824,7 @@ public class RestaurantOrderController {
+      * @return 订单信息（包含订单明细）
+      */
+     @PostMapping("/cashier/directOrder")
+-    @SaCheckPermission(value = {"restaurant:order", "operations:direct-cashier", "operations:table-cashier", "operations:console"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"restaurant:order:settle", "operations:direct-cashier:settle", "operations:table-cashier:settle", "operations:console:settle"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<RestaurantOrderVO> cashierDirectOrder(@RequestBody CashierOrderRequest request) {
+         try {
+             if (request.getCartItems() == null || request.getCartItems().isEmpty()) {
+@@ -861,7 +863,7 @@ public class RestaurantOrderController {
+      * @return 订单信息（包含订单明细）
+      */
+     @PostMapping("/cashier/settleSession")
+-    @SaCheckPermission(value = {"restaurant:order", "operations:direct-cashier", "operations:table-cashier", "operations:console"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"restaurant:order:settle", "operations:direct-cashier:settle", "operations:table-cashier:settle", "operations:console:settle"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<RestaurantOrderVO> cashierSettleSession(@RequestBody CashierSettleSessionRequest request) {
+         try {
+             if (StrUtil.isBlank(request.getSessionNo())) {
+diff --git a/liteShop-restaurant-service/src/main/java/org/hongtu/restaurant/controller/StoreInfoController.java b/liteShop-restaurant-service/src/main/java/org/hongtu/restaurant/controller/StoreInfoController.java
+index 64f8e01..d0a3bab 100644
+--- a/liteShop-restaurant-service/src/main/java/org/hongtu/restaurant/controller/StoreInfoController.java
++++ b/liteShop-restaurant-service/src/main/java/org/hongtu/restaurant/controller/StoreInfoController.java
+@@ -79,7 +79,7 @@ public class StoreInfoController {
+      * @return 新增结果
+      */
+     @PostMapping("/add")
+-    @SaCheckPermission(value = {"restaurant:store"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"restaurant:store:add"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<StoreInfo> addStore(@RequestBody StoreInfo storeInfo) {
+         try {
+             boolean result = storeInfoService.addStore(storeInfo);
+@@ -99,7 +99,7 @@ public class StoreInfoController {
+      * @return 更新结果
+      */
+     @PutMapping("/update")
+-    @SaCheckPermission(value = {"restaurant:store"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"restaurant:store:edit"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<StoreInfo> updateStore(@RequestBody StoreInfo storeInfo) {
+         try {
+             if (storeInfo.getId() == null) {
+@@ -122,7 +122,7 @@ public class StoreInfoController {
+      * @return 删除结果
+      */
+     @DeleteMapping("/delete")
+-    @SaCheckPermission(value = {"restaurant:store"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"restaurant:store:delete"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result deleteStore(@RequestParam Long id) {
+         try {
+             boolean result = storeInfoService.deleteStore(id);
+@@ -142,7 +142,7 @@ public class StoreInfoController {
+      * @return 删除结果
+      */
+     @DeleteMapping("/deleteBatch")
+-    @SaCheckPermission(value = {"restaurant:store"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"restaurant:store:delete"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result deleteStoresBatch(@RequestBody List<Long> ids) {
+         try {
+             if (ids == null || ids.isEmpty()) {
+@@ -166,7 +166,7 @@ public class StoreInfoController {
+      * @return 修改结果
+      */
+     @PutMapping("/updateStatus")
+-    @SaCheckPermission(value = {"restaurant:store"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"restaurant:store:status"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result updateStoreStatus(@RequestParam Long id, @RequestParam Integer status) {
+         try {
+             if (status == null || (status != 0 && status != 1)) {
+diff --git a/liteShop-restaurant-service/src/main/java/org/hongtu/restaurant/controller/TableInfoController.java b/liteShop-restaurant-service/src/main/java/org/hongtu/restaurant/controller/TableInfoController.java
+index 914a327..78493be 100644
+--- a/liteShop-restaurant-service/src/main/java/org/hongtu/restaurant/controller/TableInfoController.java
++++ b/liteShop-restaurant-service/src/main/java/org/hongtu/restaurant/controller/TableInfoController.java
+@@ -53,7 +53,7 @@ public class TableInfoController {
+      * @return 结果
+      */
+     @PostMapping("/add")
+-    @SaCheckPermission(value="restaurant:table", orRole="SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"restaurant:table:add"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Boolean> addTable(@RequestBody TableInfo tableInfo) {
+         boolean result = tableInfoService.addTable(tableInfo);
+         if (result) {
+@@ -69,7 +69,7 @@ public class TableInfoController {
+      * @return 结果
+      */
+     @PutMapping("/update")
+-    @SaCheckPermission(value="restaurant:table", orRole="SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"restaurant:table:edit"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Boolean> updateTable(@RequestBody TableInfo tableInfo) {
+         boolean result = tableInfoService.updateTable(tableInfo);
+         if (result) {
+@@ -85,7 +85,7 @@ public class TableInfoController {
+      * @return 结果
+      */
+     @DeleteMapping("/delete/{id}")
+-    @SaCheckPermission(value="restaurant:table", orRole="SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"restaurant:table:delete"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Boolean> deleteTable(@PathVariable Long id) {
+         boolean result = tableInfoService.deleteTable(id);
+         if (result) {
+@@ -101,7 +101,7 @@ public class TableInfoController {
+      * @return 结果
+      */
+     @DeleteMapping("/batchDelete")
+-    @SaCheckPermission(value="restaurant:table", orRole="SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"restaurant:table:delete"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Boolean> batchDeleteTable(@RequestBody List<Long> ids) {
+         boolean result = tableInfoService.batchDeleteTable(ids);
+         if (result) {
+@@ -146,7 +146,7 @@ public class TableInfoController {
+      * @return 结果
+      */
+     @PutMapping("/updateStatus")
+-    @SaCheckPermission(value = {"restaurant:table", "operations:table-cashier", "operations:console"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"restaurant:table:status", "operations:table-cashier:status", "operations:console:status"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Boolean> updateTableStatus(
+             @RequestParam Long id,
+             @RequestParam Integer status
+diff --git a/liteShop-restaurant-service/src/main/java/org/hongtu/restaurant/controller/TableSessionController.java b/liteShop-restaurant-service/src/main/java/org/hongtu/restaurant/controller/TableSessionController.java
+index 86d53a0..854d983 100644
+--- a/liteShop-restaurant-service/src/main/java/org/hongtu/restaurant/controller/TableSessionController.java
++++ b/liteShop-restaurant-service/src/main/java/org/hongtu/restaurant/controller/TableSessionController.java
+@@ -59,7 +59,7 @@ public class TableSessionController {
+      * @return 会话信息
+      */
+     @PostMapping("/admin/open")
+-    @SaCheckPermission(value={"restaurant:table","operations:table-cashier","operations:console"},mode=SaMode.OR,orRole="SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"restaurant:table:open", "operations:table-cashier:open", "operations:console:open"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<TableSessionVO> adminOpenTable(@RequestBody AdminOpenTableRequest request) {
+         try {
+             // 参数校验
+@@ -154,6 +154,7 @@ public class TableSessionController {
+      * @return 结果
+      */
+     @PutMapping("/end")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"restaurant:table:settle", "operations:table-cashier:settle", "operations:console:settle"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Boolean> endSession(
+             @RequestParam String sessionNo,
+             @RequestParam BigDecimal paidAmount
+@@ -208,7 +209,7 @@ public class TableSessionController {
+      * @return 清除的会话数量
+      */
+     @PostMapping("/clearAll")
+-    @SaCheckPermission(value = {"restaurant:table", "operations:table-cashier", "operations:console"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"restaurant:table:clear", "operations:table-cashier:clear", "operations:console:clear"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Map<String, Object>> clearAllSessions(
+             @RequestParam(required = false) Long storeId
+     ) {
+@@ -234,7 +235,7 @@ public class TableSessionController {
+      * @return 清除的会话数量
+      */
+     @PostMapping("/clearByTables")
+-    @SaCheckPermission(value = {"restaurant:table", "operations:table-cashier", "operations:console"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"restaurant:table:clear", "operations:table-cashier:clear", "operations:console:clear"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Map<String, Object>> clearSessionsByTables(
+             @RequestBody List<Long> tableIds
+     ) {
+diff --git a/liteShop-restaurant-service/src/main/java/org/hongtu/restaurant/service/impl/PrinterInfoServiceImpl.java b/liteShop-restaurant-service/src/main/java/org/hongtu/restaurant/service/impl/PrinterInfoServiceImpl.java
+index bd2bd5f..05ecd40 100644
+--- a/liteShop-restaurant-service/src/main/java/org/hongtu/restaurant/service/impl/PrinterInfoServiceImpl.java
++++ b/liteShop-restaurant-service/src/main/java/org/hongtu/restaurant/service/impl/PrinterInfoServiceImpl.java
+@@ -212,6 +212,7 @@ public class PrinterInfoServiceImpl extends ServiceImpl<PrinterInfoMapper, Print
+             throw new RuntimeException("打印机不存在");
+         }
+ 
++        org.hongtu.security.OperationPermission.requireChange("restaurant:printer:status", existing.getEnabled(), printerInfo.getEnabled());
+         printerInfo.setUpdatedAt(LocalDateTime.now());
+         return this.updateById(printerInfo);
+     }
+diff --git a/liteShop-restaurant-service/src/main/java/org/hongtu/restaurant/service/impl/PrintTemplateServiceImpl.java b/liteShop-restaurant-service/src/main/java/org/hongtu/restaurant/service/impl/PrintTemplateServiceImpl.java
+index eee70ba..dc090c2 100644
+--- a/liteShop-restaurant-service/src/main/java/org/hongtu/restaurant/service/impl/PrintTemplateServiceImpl.java
++++ b/liteShop-restaurant-service/src/main/java/org/hongtu/restaurant/service/impl/PrintTemplateServiceImpl.java
+@@ -116,6 +116,8 @@ public class PrintTemplateServiceImpl extends ServiceImpl<PrintTemplateMapper, P
+         if (existing == null) {
+             return false;
+         }
++        org.hongtu.security.OperationPermission.requireChange("operations:templates:status", existing.getEnabled(), template.getEnabled());
++        org.hongtu.security.OperationPermission.requireChange("operations:templates:default", existing.getIsDefault(), template.getIsDefault());
+         Long targetStoreId = template.getStoreId() == null ? existing.getStoreId() : template.getStoreId();
+         storeDataScopeService.checkStoreAccess(targetStoreId);
+         if (storeDataScopeService.requiresStoreRestriction() && targetStoreId == null) {
+diff --git a/liteShop-restaurant-service/src/main/java/org/hongtu/restaurant/service/impl/RestaurantOrderServiceImpl.java b/liteShop-restaurant-service/src/main/java/org/hongtu/restaurant/service/impl/RestaurantOrderServiceImpl.java
+index 20bcacf..130dbf6 100644
+--- a/liteShop-restaurant-service/src/main/java/org/hongtu/restaurant/service/impl/RestaurantOrderServiceImpl.java
++++ b/liteShop-restaurant-service/src/main/java/org/hongtu/restaurant/service/impl/RestaurantOrderServiceImpl.java
+@@ -121,6 +121,7 @@ public class RestaurantOrderServiceImpl extends ServiceImpl<RestaurantOrderMappe
+         BigDecimal calculatedTotalAmount = BigDecimal.ZERO;
+         for (CreateOrderRequest.CartItem cartItem : request.getCartItems()) {
+             if (cartItem.getIsGift() != null && cartItem.getIsGift() == 1) {
++                org.hongtu.security.OperationPermission.order("gift");
+                 continue; // 赠送菜品不计入总价
+             }
+             BigDecimal itemPrice = cartItem.getPrice() != null ?
+@@ -1646,12 +1647,15 @@ public class RestaurantOrderServiceImpl extends ServiceImpl<RestaurantOrderMappe
+ 
+             calculatedTotalAmount = calculatedTotalAmount.add(itemTotal);
+             if (cartItem.getIsGift() != null && cartItem.getIsGift() == 1) {
++                org.hongtu.security.OperationPermission.order("gift");
+                 itemDiscountSum = itemDiscountSum.add(itemTotal); // 赠送：该项优惠=原价
+             }
+         }
+ 
+         // 折前应付 = 总金额 - 订单项优惠
+         BigDecimal payableBeforeRate = calculatedTotalAmount.subtract(itemDiscountSum);
++        if (request.getDiscountRate() != null && request.getDiscountRate().compareTo(BigDecimal.ONE) != 0)
++            org.hongtu.security.OperationPermission.order("discount");
+         BigDecimal discountRate = request.getDiscountRate() != null ?
+                 request.getDiscountRate() : BigDecimal.ONE;
+         BigDecimal rateDiscountAmount = BigDecimal.ZERO;
+@@ -1857,6 +1861,8 @@ public class RestaurantOrderServiceImpl extends ServiceImpl<RestaurantOrderMappe
+         if (request.getNote() != null) {
+             order.setNote(request.getNote());
+         }
++        if (request.getDiscountRate() != null && request.getDiscountRate().compareTo(BigDecimal.ONE) != 0)
++            org.hongtu.security.OperationPermission.order("discount");
+         if (request.getDiscountRate() != null && request.getDiscountRate().compareTo(BigDecimal.ZERO) >= 0
+                 && request.getDiscountRate().compareTo(BigDecimal.ONE) <= 0) {
+             BigDecimal currentPayable = order.getActualAmount() != null ? order.getActualAmount() : order.getTotalAmount();
+@@ -2030,6 +2036,7 @@ public class RestaurantOrderServiceImpl extends ServiceImpl<RestaurantOrderMappe
+         for (CreateOrderRequest.CartItem cartItem : cartItems) {
+             // 跳过赠送菜品的验证（赠送菜品价格为0）
+             if (cartItem.getIsGift() != null && cartItem.getIsGift() == 1) {
++                org.hongtu.security.OperationPermission.order("gift");
+                 log.info("菜品【{}】为赠送菜品，跳过价格验证", cartItem.getDishName());
+                 continue;
+             }
+@@ -2155,6 +2162,7 @@ public class RestaurantOrderServiceImpl extends ServiceImpl<RestaurantOrderMappe
+         for (CashierOrderRequest.CartItem cartItem : cartItems) {
+             // 跳过赠送菜品的验证（赠送菜品价格为0）
+             if (cartItem.getIsGift() != null && cartItem.getIsGift() == 1) {
++                org.hongtu.security.OperationPermission.order("gift");
+                 log.info("菜品【{}】为赠送菜品，跳过价格验证", cartItem.getDishName());
+                 continue;
+             }
+diff --git a/liteShop-restaurant-service/src/main/java/org/hongtu/restaurant/service/impl/StoreInfoServiceImpl.java b/liteShop-restaurant-service/src/main/java/org/hongtu/restaurant/service/impl/StoreInfoServiceImpl.java
+index bd2cfa3..294fe49 100644
+--- a/liteShop-restaurant-service/src/main/java/org/hongtu/restaurant/service/impl/StoreInfoServiceImpl.java
++++ b/liteShop-restaurant-service/src/main/java/org/hongtu/restaurant/service/impl/StoreInfoServiceImpl.java
+@@ -98,6 +98,7 @@ public class StoreInfoServiceImpl extends ServiceImpl<StoreInfoMapper, StoreInfo
+             throw new RuntimeException("门店不存在");
+         }
+ 
++        org.hongtu.security.OperationPermission.requireChange("restaurant:store:status", existingStore.getStatus(), storeInfo.getStatus());
+         // 如果修改了门店编码，需要校验新编码是否已存在
+         if (StringUtils.hasText(storeInfo.getStoreCode())
+                 && !storeInfo.getStoreCode().equals(existingStore.getStoreCode())) {
+diff --git a/liteShop-restaurant-service/src/main/java/org/hongtu/restaurant/service/impl/TableInfoServiceImpl.java b/liteShop-restaurant-service/src/main/java/org/hongtu/restaurant/service/impl/TableInfoServiceImpl.java
+index b4d9b7c..d7d303a 100644
+--- a/liteShop-restaurant-service/src/main/java/org/hongtu/restaurant/service/impl/TableInfoServiceImpl.java
++++ b/liteShop-restaurant-service/src/main/java/org/hongtu/restaurant/service/impl/TableInfoServiceImpl.java
+@@ -77,6 +77,7 @@ public class TableInfoServiceImpl extends ServiceImpl<TableInfoMapper, TableInfo
+     public boolean updateTable(TableInfo tableInfo) {
+         TableInfo existing = getOne(new LambdaQueryWrapper<TableInfo>().eq(TableInfo::getId, tableInfo.getId()).last("FOR UPDATE"));
+         if (existing == null) throw new BusinessException(404,"桌位不存在或无权操作");
++        org.hongtu.security.OperationPermission.requireChange("restaurant:table:status", existing.getStatus(), tableInfo.getStatus());
+         storeDataScopeService.checkStoreAccess(existing.getStoreId());
+         storeDataScopeService.checkStoreAccess(tableInfo.getStoreId());
+         boolean active = tableSessionService.getActiveSessionByTableId(existing.getId()) != null || existing.getStatus()==TableStatusEnum.IN_USE;
+diff --git a/liteShop-user-service/src/main/java/org/hongtu/controller/SysRoleController.java b/liteShop-user-service/src/main/java/org/hongtu/controller/SysRoleController.java
+index 5f38077..1bf1527 100644
+--- a/liteShop-user-service/src/main/java/org/hongtu/controller/SysRoleController.java
++++ b/liteShop-user-service/src/main/java/org/hongtu/controller/SysRoleController.java
+@@ -30,6 +30,7 @@ public class SysRoleController {
+      * 获取所有角色列表
+      */
+     @GetMapping("/list")
++    @SaCheckPermission(value = {"system:role", "system:user"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<List<SysRole>> getAllRoles() {
+         return sysRoleService.getAllRoles();
+     }
+@@ -38,7 +39,7 @@ public class SysRoleController {
+      * 添加角色
+      */
+     @PostMapping("/add")
+-    @SaCheckPermission(value = {"system:role"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"system:role:add"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result addRole(@RequestBody SysRole role) {
+         if (role == null) {
+             return Result.error("角色信息不能为空");
+@@ -57,7 +58,7 @@ public class SysRoleController {
+      * 更新角色
+      */
+     @PutMapping("/update")
+-    @SaCheckPermission(value = {"system:role"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"system:role:edit"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result updateRole(@RequestBody SysRole role) {
+         if (role == null || role.getId() == null) {
+             return Result.error("角色信息不完整");
+@@ -76,7 +77,7 @@ public class SysRoleController {
+      * 删除角色
+      */
+     @DeleteMapping("/{id}")
+-    @SaCheckPermission(value = {"system:role"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"system:role:delete"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result deleteRole(@PathVariable Long id) {
+         return sysRoleService.deleteRole(id);
+     }
+diff --git a/liteShop-user-service/src/main/java/org/hongtu/controller/SysRolePermissionController.java b/liteShop-user-service/src/main/java/org/hongtu/controller/SysRolePermissionController.java
+index e9a4a32..b7db7f7 100644
+--- a/liteShop-user-service/src/main/java/org/hongtu/controller/SysRolePermissionController.java
++++ b/liteShop-user-service/src/main/java/org/hongtu/controller/SysRolePermissionController.java
+@@ -27,7 +27,7 @@ public class SysRolePermissionController {
+      *
+      * */
+     @GetMapping("/listMenuTreeByRole")
+-    @SaCheckPermission(value = {"system:role"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"system:role:assign"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result listMenuTreeByRole(Long roleId){
+         if(roleId == null){
+             return Result.error("角色ID不能为空");
+@@ -43,7 +43,7 @@ public class SysRolePermissionController {
+      * @return 操作结果
+      */
+     @PostMapping("/assign")
+-    @SaCheckPermission(value = {"system:role"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"system:role:assign"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result assignPermissions(@RequestParam Long roleId, @RequestBody List<Long> permissionIds) {
+         if (roleId == null) {
+             return Result.error("角色ID不能为空");
+diff --git a/liteShop-user-service/src/main/java/org/hongtu/controller/SysUserController.java b/liteShop-user-service/src/main/java/org/hongtu/controller/SysUserController.java
+index ad58b00..f41b48f 100644
+--- a/liteShop-user-service/src/main/java/org/hongtu/controller/SysUserController.java
++++ b/liteShop-user-service/src/main/java/org/hongtu/controller/SysUserController.java
+@@ -195,7 +195,7 @@ public class SysUserController {
+      * 管理员编辑用户信息
+      */
+     @PutMapping("/admin/edit")
+-    @SaCheckPermission(value = {"system:user"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"system:user:edit"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result adminEditUser(@RequestBody SysUser sysUser) {
+         if (sysUser == null || sysUser.getId() == null) {
+             return Result.error("用户ID不能为空");
+@@ -210,7 +210,7 @@ public class SysUserController {
+      * @return 重置结果
+      */
+     @PostMapping("/admin/resetPassword")
+-    @SaCheckPermission(value = {"system:user"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"system:user:reset-password"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result adminResetPassword(@RequestParam Long userId,
+                                      @RequestParam(required = false) String newPassword) {
+         if (userId == null) {
+@@ -236,7 +236,7 @@ public class SysUserController {
+      * 删除用户
+      */
+     @DeleteMapping("/{id}")
+-    @SaCheckPermission(value = {"system:user"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"system:user:delete"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result deleteUser(@PathVariable Long id) {
+         if (id == null) {
+             return Result.error("用户ID不能为空");
+@@ -248,7 +248,7 @@ public class SysUserController {
+      * 添加用户
+      */
+     @PostMapping("/add")
+-    @SaCheckPermission(value = {"system:user"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"system:user:add"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result addUser(@RequestBody SysUser sysUser) {
+         if (sysUser == null) {
+             return Result.error("用户信息不能为空");
+@@ -263,7 +263,7 @@ public class SysUserController {
+      * 管理员为用户充值余额
+      */
+     @PostMapping("/admin/recharge")
+-    @SaCheckPermission(value = {"system:user"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"system:user:recharge"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result rechargeBalance(@RequestParam Long userId, @RequestParam Integer amount) {
+         if (userId == null) {
+             return Result.error("用户ID不能为空");
+diff --git a/liteShop-user-service/src/main/java/org/hongtu/controller/SysUserRoleController.java b/liteShop-user-service/src/main/java/org/hongtu/controller/SysUserRoleController.java
+index 1e8dbf6..6e62ddb 100644
+--- a/liteShop-user-service/src/main/java/org/hongtu/controller/SysUserRoleController.java
++++ b/liteShop-user-service/src/main/java/org/hongtu/controller/SysUserRoleController.java
+@@ -27,7 +27,7 @@ public class SysUserRoleController {
+      * 为用户分配角色（会先清除原有角色，再重新分配）
+      */
+     @PostMapping("/assign")
+-    @SaCheckPermission(value = {"system:user"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"system:user:assign-role"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result assignRoles(@RequestParam Long userId, @RequestBody List<Long> roleIds) {
+         return sysUserRoleService.assignRoles(userId, roleIds);
+     }
+diff --git a/liteShop-user-service/src/main/java/org/hongtu/controller/SysUserStoreController.java b/liteShop-user-service/src/main/java/org/hongtu/controller/SysUserStoreController.java
+index ea17c13..7798c7c 100644
+--- a/liteShop-user-service/src/main/java/org/hongtu/controller/SysUserStoreController.java
++++ b/liteShop-user-service/src/main/java/org/hongtu/controller/SysUserStoreController.java
+@@ -33,7 +33,7 @@ public class SysUserStoreController {
+     }
+ 
+     @PostMapping("/assign")
+-    @SaCheckPermission(value = {"system:user-store"}, mode = SaMode.OR, orRole = "SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"system:user-store:assign"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result<Void> assignStores(@RequestParam Long userId,
+                                      @RequestParam(required = false) Long defaultStoreId,
+                                      @RequestBody List<Long> storeIds) {
+diff --git a/liteShop-user-service/src/main/java/org/hongtu/controller/UserLevelController.java b/liteShop-user-service/src/main/java/org/hongtu/controller/UserLevelController.java
+index a422f12..081a0bd 100644
+--- a/liteShop-user-service/src/main/java/org/hongtu/controller/UserLevelController.java
++++ b/liteShop-user-service/src/main/java/org/hongtu/controller/UserLevelController.java
+@@ -44,7 +44,7 @@ public class UserLevelController {
+      * 添加等级配置
+      */
+     @PostMapping("/add")
+-    @cn.dev33.satoken.annotation.SaCheckPermission(value="system:level", orRole="SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"system:level:add"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result addLevel(@RequestBody UserLevel userLevel) {
+         return userLevelService.addLevel(userLevel);
+     }
+@@ -53,7 +53,7 @@ public class UserLevelController {
+      * 更新等级配置
+      */
+     @PutMapping("/update")
+-    @cn.dev33.satoken.annotation.SaCheckPermission(value="system:level", orRole="SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"system:level:edit"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result updateLevel(@RequestBody UserLevel userLevel) {
+         return userLevelService.updateLevel(userLevel);
+     }
+@@ -62,7 +62,7 @@ public class UserLevelController {
+      * 删除等级配置
+      */
+     @DeleteMapping("/{id}")
+-    @cn.dev33.satoken.annotation.SaCheckPermission(value="system:level", orRole="SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"system:level:delete"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result deleteLevel(@PathVariable Long id) {
+         return userLevelService.deleteLevel(id);
+     }
+@@ -71,7 +71,7 @@ public class UserLevelController {
+      * 启用/禁用等级配置
+      */
+     @PutMapping("/editStatus/{id}")
+-    @cn.dev33.satoken.annotation.SaCheckPermission(value="system:level", orRole="SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"system:level:status"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result updateLevelStatus(@PathVariable Long id) {
+         return userLevelService.updateLevelStatus(id);
+     }
+@@ -80,7 +80,7 @@ public class UserLevelController {
+      * 更新用户等级
+      */
+     @PutMapping("/updateUserLevel")
+-    @cn.dev33.satoken.annotation.SaCheckPermission(value="system:user", orRole="SUPER_ADMIN")
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"system:user:level"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result updateUserLevel(@RequestParam Long userId,@RequestParam Integer levelCode) {
+         return userLevelService.updateUserLevel(userId,levelCode);
+     }
+diff --git a/liteShop-user-service/src/main/java/org/hongtu/controller/UserLevelSchemeController.java b/liteShop-user-service/src/main/java/org/hongtu/controller/UserLevelSchemeController.java
+index e279944..8b171d0 100644
+--- a/liteShop-user-service/src/main/java/org/hongtu/controller/UserLevelSchemeController.java
++++ b/liteShop-user-service/src/main/java/org/hongtu/controller/UserLevelSchemeController.java
+@@ -13,13 +13,19 @@ public class UserLevelSchemeController {
+     public record SchemeRequest(String name, String description, Long copyFromId) {}
+     @GetMapping public Result list() { return Result.success(Map.of("schemes",service.owned(),"templates",service.templates())); }
+     @GetMapping("/{id}/levels") public Result levels(@PathVariable Long id) { return Result.success(service.schemeLevels(id)); }
+-    @PostMapping public Result create(@RequestBody SchemeRequest body) { return Result.success(service.create(body.name(),body.description(),body.copyFromId())); }
+-    @PutMapping("/{id}") public Result rename(@PathVariable Long id,@RequestBody SchemeRequest body) { service.rename(id,body.name(),body.description());return Result.success("方案已更新"); }
++    @PostMapping @cn.dev33.satoken.annotation.SaCheckPermission(value = {"system:level:scheme-add"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
++    public Result create(@RequestBody SchemeRequest body) { return Result.success(service.create(body.name(),body.description(),body.copyFromId())); }
++    @PutMapping("/{id}") @cn.dev33.satoken.annotation.SaCheckPermission(value = {"system:level:scheme-edit"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
++    public Result rename(@PathVariable Long id,@RequestBody SchemeRequest body) { service.rename(id,body.name(),body.description());return Result.success("方案已更新"); }
+     @GetMapping("/{id}/tenants") public Result assignedTenants(@PathVariable Long id) { return Result.success(service.assignedTenants(id)); }
+     @PutMapping("/{id}/tenants") public Result assignTenants(@PathVariable Long id,@RequestBody List<Long> tenantIds) { service.assignTenants(id,tenantIds);return Result.success("租户可选等级体系已更新"); }
+-    @PostMapping("/{id}/use-template") public Result useTemplate(@PathVariable Long id) {return Result.success(service.useTemplate(id));}
+-    @PostMapping("/use-default") public Result useDefault() { return Result.success(service.useDefaultTemplate()); }
+-    @PostMapping("/{id}/activate") public Result activate(@PathVariable Long id) {service.activate(id);return Result.success("方案已启用，会员等级已按原经验值重新计算");}
++    @PostMapping("/{id}/use-template") @cn.dev33.satoken.annotation.SaCheckPermission(value = {"system:level:scheme-add"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
++    public Result useTemplate(@PathVariable Long id) {return Result.success(service.useTemplate(id));}
++    @PostMapping("/use-default") @cn.dev33.satoken.annotation.SaCheckPermission(value = {"system:level:scheme-add"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
++    public Result useDefault() { return Result.success(service.useDefaultTemplate()); }
++    @PostMapping("/{id}/activate") @cn.dev33.satoken.annotation.SaCheckPermission(value = {"system:level:scheme-activate"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
++    public Result activate(@PathVariable Long id) {service.activate(id);return Result.success("方案已启用，会员等级已按原经验值重新计算");}
+     @PostMapping("/{id}/default") public Result setDefault(@PathVariable Long id) {service.setDefaultTemplate(id);return Result.success("默认模板已更新");}
+-    @DeleteMapping("/{id}") public Result delete(@PathVariable Long id) {service.delete(id);return Result.success("方案已删除");}
++    @DeleteMapping("/{id}") @cn.dev33.satoken.annotation.SaCheckPermission(value = {"system:level:scheme-delete"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
++    public Result delete(@PathVariable Long id) {service.delete(id);return Result.success("方案已删除");}
+ }
+diff --git a/liteShop-user-service/src/main/java/org/hongtu/controller/UserPointsRecordController.java b/liteShop-user-service/src/main/java/org/hongtu/controller/UserPointsRecordController.java
+index a029659..7ac4e81 100644
+--- a/liteShop-user-service/src/main/java/org/hongtu/controller/UserPointsRecordController.java
++++ b/liteShop-user-service/src/main/java/org/hongtu/controller/UserPointsRecordController.java
+@@ -59,7 +59,7 @@ public class UserPointsRecordController {
+      * @return 积分记录列表
+      */
+     @GetMapping("/admin/list")
+-    @SaCheckRole(value = {"ADMIN", "SUPER_ADMIN"}, mode = SaMode.OR)
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"system:user"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result getUserPointsRecords(
+             @RequestParam Long userId,
+             @RequestParam(defaultValue = "1") Integer pageNum,
+@@ -75,7 +75,7 @@ public class UserPointsRecordController {
+      * @return 积分统计信息
+      */
+     @GetMapping("/admin/statistics")
+-    @SaCheckRole(value = {"ADMIN", "SUPER_ADMIN"}, mode = SaMode.OR)
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"system:user"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result getUserPointsStatistics(@RequestParam Long userId) {
+         return userPointsRecordService.getUserPointsStatistics(userId);
+     }
+@@ -86,7 +86,7 @@ public class UserPointsRecordController {
+      * @return 操作结果
+      */
+     @DeleteMapping("/admin/{id}")
+-    @SaCheckRole(value = {"ADMIN", "SUPER_ADMIN"}, mode = SaMode.OR)
++    @cn.dev33.satoken.annotation.SaCheckPermission(value = {"system:user:points-delete"}, mode = cn.dev33.satoken.annotation.SaMode.OR, orRole = "SUPER_ADMIN")
+     public Result deletePointsRecord(@PathVariable Long id) {
+         boolean removed = userPointsRecordService.removeById(id);
+         return removed ? Result.success("删除成功") : Result.error("删除失败");
+diff --git a/liteShop-user-service/src/main/java/org/hongtu/service/impl/SysRolePermissionServiceImpl.java b/liteShop-user-service/src/main/java/org/hongtu/service/impl/SysRolePermissionServiceImpl.java
+index 43caeee..b01fc43 100644
+--- a/liteShop-user-service/src/main/java/org/hongtu/service/impl/SysRolePermissionServiceImpl.java
++++ b/liteShop-user-service/src/main/java/org/hongtu/service/impl/SysRolePermissionServiceImpl.java
+@@ -101,6 +101,7 @@ public class SysRolePermissionServiceImpl extends ServiceImpl<SysRolePermissionM
+             List<Long> requested = permissionIds == null ? List.of() : permissionIds.stream().distinct().toList();
+             List<SysPermission> available = assignableMenus(role, sysPermissionMapper.selectList(
+                     new LambdaQueryWrapper<SysPermission>().eq(SysPermission::getStatus, StatusEnum.NORMAL)));
++            requested = org.hongtu.service.support.PermissionHierarchy.assignment(available, requested);
+             java.util.Set<Long> allowed = available.stream().map(SysPermission::getId).collect(Collectors.toSet());
+             if (requested.stream().anyMatch(id -> id == null || !allowed.contains(id))) {
+                 throw new BusinessException(403, "存在无效、已停用或超出可分配范围的权限");
+@@ -127,8 +128,9 @@ public class SysRolePermissionServiceImpl extends ServiceImpl<SysRolePermissionM
+             }
+             // 4. 计算需要删除和添加的权限
+             // 需要删除的权限ID：existingPermissionIds中有但permissionIds中没有的
++            List<Long> normalizedRequested = requested;
+             List<Long> toDeleteIds = existingPermissionIds.stream()
+-                    .filter(id -> !requested.contains(id))
++                    .filter(id -> !normalizedRequested.contains(id))
+                     .collect(Collectors.toList());
+             // 需要添加的权限ID：permissionIds中有但existingPermissionIds中没有的
+             List<Long> toAddIds = requested.stream()
+diff --git a/liteShop-user-service/src/main/java/org/hongtu/service/impl/SysUserServiceImpl.java b/liteShop-user-service/src/main/java/org/hongtu/service/impl/SysUserServiceImpl.java
+index eba10c2..12de3d9 100644
+--- a/liteShop-user-service/src/main/java/org/hongtu/service/impl/SysUserServiceImpl.java
++++ b/liteShop-user-service/src/main/java/org/hongtu/service/impl/SysUserServiceImpl.java
+@@ -403,6 +403,7 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
+         }
+ 
+         List<String> requestedCodes = sysUser.getRoleCode() == null || sysUser.getRoleCode().isEmpty() ? List.of("USER") : sysUser.getRoleCode().stream().distinct().toList();
++        if (!superAdmin && !requestedCodes.equals(List.of("USER"))) StpUtil.checkPermission("system:user:assign-role");
+         TenantScope.run(targetTenantId, () -> {
+             List<Long> ids = getUserRoleIds(requestedCodes);
+             if (ids.size() != requestedCodes.size()) throw new org.hongtu.exception.BusinessException(400,"存在无效或跨租户角色");
+@@ -433,7 +434,7 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
+             if( targetId.contains("SUPER_ADMIN")){
+                 return Result.error("无法删除其它的超级管理员");
+             }
+-        } else if (StpUtil.hasRole("ADMIN") || StpUtil.hasPermission("system:user")) {
++        } else if (StpUtil.hasPermission("system:user:delete")) {
+             if( targetId.contains("SUPER_ADMIN")||targetId.contains("ADMIN")){
+                 return Result.error("无法删除超级管理员以及其它的管理员");
+             }
+@@ -729,7 +730,7 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
+                 if( targetId.contains("SUPER_ADMIN")){
+                     return Result.error("无法编辑其它的超级管理员");
+                 }
+-            } else if (StpUtil.hasRole("ADMIN") || StpUtil.hasPermission("system:user")) {
++            } else if (StpUtil.hasPermission("system:user:edit")) {
+                 if( targetId.contains("SUPER_ADMIN")||targetId.contains("ADMIN")){
+                     return Result.error("无法编辑超级管理员以及其它的管理员");
+                 }
+@@ -749,8 +750,10 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
+             }
+         }
+ 
++        if (sysUser.getLevel() == null) sysUser.setLevel(existingUser.getLevel());
+         //等级修改判断
+         if (!existingUser.getLevel().equals(sysUser.getLevel())) {
++            if (!TenantContext.isSuperAdmin()) StpUtil.checkPermission("system:user:level");
+             org.hongtu.api.util.FeignResultUtil.unwrap(userLevelService.updateUserLevel(sysUser.getId(),sysUser.getLevel()));
+             sysUser.setExp(userLevelMapper.getLevelByLevelCode(sysUser.getLevel()).getRequiredExp());
+         }
+@@ -758,8 +761,9 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
+         List<String> roleList = StpUtil.getRoleList(sysUser.getId());
+         // 将两个列表转换为Set后比较，忽略元素顺序
+         Set<String> currentRoleSet = new HashSet<>(roleList);
+-        Set<String> newRoleSet = new HashSet<>(sysUser.getRoleCode());
++        Set<String> newRoleSet = sysUser.getRoleCode() == null ? currentRoleSet : new HashSet<>(sysUser.getRoleCode());
+         if(!currentRoleSet.equals(newRoleSet)){
++            if (!TenantContext.isSuperAdmin()) StpUtil.checkPermission("system:user:assign-role");
+             // 根据角色编码列表获取角色ID列表
+             List<Long> userRoleIds = getUserRoleIds(sysUser.getRoleCode());
+             // 分配角色
+@@ -856,7 +860,7 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
+             if (targetRoleCodes.contains("SUPER_ADMIN")) {
+                 return Result.error("无法重置其他超级管理员的密码");
+             }
+-        } else if (StpUtil.hasRole("ADMIN") || StpUtil.hasPermission("system:user")) {
++        } else if (StpUtil.hasPermission("system:user:reset-password")) {
+             // 管理员不能重置超级管理员和其他管理员的密码
+             if (targetRoleCodes.contains("SUPER_ADMIN") || targetRoleCodes.contains("ADMIN")) {
+                 return Result.error("无法重置超级管理员或其他管理员的密码");
+diff --git a/liteShop-user-service/src/main/java/org/hongtu/service/impl/UserLevelServiceImpl.java b/liteShop-user-service/src/main/java/org/hongtu/service/impl/UserLevelServiceImpl.java
+index 56ea7f0..13c93d2 100644
+--- a/liteShop-user-service/src/main/java/org/hongtu/service/impl/UserLevelServiceImpl.java
++++ b/liteShop-user-service/src/main/java/org/hongtu/service/impl/UserLevelServiceImpl.java
+@@ -55,6 +55,7 @@ public class UserLevelServiceImpl extends ServiceImpl<UserLevelMapper, UserLevel
+     public Result updateLevel(UserLevel level) {
+         schemes.lockTenant(); validateInput(level);
+         var existing = requireLevel(level.getId());
++        org.hongtu.security.OperationPermission.requireChange("system:level:status", existing.getStatus(), level.getStatus());
+         var scheme = schemes.writable(existing.getSchemeId());
+         level.setTenantId(scheme.getTenantId()).setSchemeId(scheme.getId()).setCreateTime(existing.getCreateTime()).setUpdateTime(LocalDateTime.now());
+         validateChange(scheme,level,existing.getId());
+diff --git a/liteShop-user-service/src/main/java/org/hongtu/service/support/PermissionHierarchy.java b/liteShop-user-service/src/main/java/org/hongtu/service/support/PermissionHierarchy.java
+index d3b7441..196708c 100644
+--- a/liteShop-user-service/src/main/java/org/hongtu/service/support/PermissionHierarchy.java
++++ b/liteShop-user-service/src/main/java/org/hongtu/service/support/PermissionHierarchy.java
+@@ -10,6 +10,24 @@ import java.util.stream.Collectors;
+ /** Pure hierarchy validation and navigation ancestor resolution. */
+ public final class PermissionHierarchy {
+     private PermissionHierarchy() {}
++    /** Selecting an action includes its page; selecting a page never includes its actions. */
++    public static List<Long> assignment(List<SysPermission> available, List<Long> selected) {
++        Map<Long, SysPermission> byId = available.stream().collect(Collectors.toMap(SysPermission::getId, p -> p));
++        Set<Long> result = new LinkedHashSet<>();
++        for (Long id : selected) {
++            Set<Long> visited = new HashSet<>();
++            Long cursor = id;
++            while (cursor != null && cursor != 0L) {
++                SysPermission node = byId.get(cursor);
++                if (node == null || node.getStatus() != StatusEnum.NORMAL || !visited.add(cursor))
++                    throw new IllegalArgumentException("权限或上级菜单不可分配，请刷新后重试");
++                result.add(cursor);
++                cursor = node.getParentId();
++            }
++            if (id == null || id == 0L) throw new IllegalArgumentException("权限ID不能为空");
++        }
++        return new ArrayList<>(result);
++    }
+     public static boolean isDirectory(SysPermission row) {
+         return row.getPermissionType() == PermissionTypeEnum.MENU
+                 && Set.of("Layout", "/index/index", "index/index", "index/index.vue")
+diff --git a/liteShop-user-service/src/test/java/org/hongtu/service/impl/PermissionAssignmentTest.java b/liteShop-user-service/src/test/java/org/hongtu/service/impl/PermissionAssignmentTest.java
+index e69de29..f4800b3 100644
+--- /dev/null
++++ b/liteShop-user-service/src/test/java/org/hongtu/service/impl/PermissionAssignmentTest.java
+@@ -0,0 +1,34 @@
++package org.hongtu.service.impl;
++
++import org.hongtu.DTO.SysPermission;
++import org.hongtu.enums.PermissionTypeEnum;
++import org.hongtu.enums.StatusEnum;
++import org.hongtu.service.support.PermissionHierarchy;
++import org.junit.jupiter.api.Test;
++import java.util.List;
++import static org.junit.jupiter.api.Assertions.*;
++
++class PermissionAssignmentTest {
++    private SysPermission row(long id, long parent, PermissionTypeEnum type) {
++        return new SysPermission().setId(id).setParentId(parent).setPermissionType(type).setStatus(StatusEnum.NORMAL);
++    }
++    private List<SysPermission> tree() {
++        return List.of(row(1, 0, PermissionTypeEnum.MENU), row(2, 1, PermissionTypeEnum.MENU),
++                row(3, 2, PermissionTypeEnum.BUTTON), row(4, 2, PermissionTypeEnum.BUTTON));
++    }
++    @Test void pageSelectionDoesNotIncludeButtons() {
++        assertEquals(List.of(2L, 1L), PermissionHierarchy.assignment(tree(), List.of(2L)));
++    }
++    @Test void actionSelectionIncludesOnlyItsAncestors() {
++        assertEquals(List.of(3L, 2L, 1L), PermissionHierarchy.assignment(tree(), List.of(3L)));
++    }
++    @Test void missingOrDisabledParentsCannotBecomeGranted() {
++        assertThrows(IllegalArgumentException.class, () -> PermissionHierarchy.assignment(tree(), List.of(99L)));
++        var nodes = tree(); nodes.get(1).setStatus(StatusEnum.DISABLED);
++        assertThrows(IllegalArgumentException.class, () -> PermissionHierarchy.assignment(nodes, List.of(3L)));
++    }
++    @Test void emptySelectionRevokesAllAndDuplicateSelectionIsIdempotent() {
++        assertEquals(List.of(), PermissionHierarchy.assignment(tree(), List.of()));
++        assertEquals(List.of(3L, 2L, 1L), PermissionHierarchy.assignment(tree(), List.of(3L, 3L)));
++    }
++}
+diff --git a/liteShop-user-service/src/test/java/org/hongtu/service/OperationPermissionTest.java b/liteShop-user-service/src/test/java/org/hongtu/service/OperationPermissionTest.java
+index e69de29..3790292 100644
+--- /dev/null
++++ b/liteShop-user-service/src/test/java/org/hongtu/service/OperationPermissionTest.java
+@@ -0,0 +1,79 @@
++package org.hongtu.service;
++
++import cn.dev33.satoken.SaManager;
++import cn.dev33.satoken.stp.StpInterface;
++import cn.dev33.satoken.stp.StpLogic;
++import cn.dev33.satoken.stp.StpUtil;
++import cn.dev33.satoken.strategy.SaAnnotationStrategy;
++import cn.dev33.satoken.exception.NotPermissionException;
++import org.hongtu.controller.*;
++import org.hongtu.security.OperationPermission;
++import org.junit.jupiter.api.*;
++import java.util.*;
++import static org.junit.jupiter.api.Assertions.*;
++
++class OperationPermissionTest {
++    private StpInterface previous;
++    private StpLogic previousLogic;
++    private List<String> codes = List.of();
++    private List<String> roles = List.of("CUSTOM_MANAGER");
++
++    @BeforeEach void setUp() {
++        previous = SaManager.getStpInterface();
++        previousLogic = StpUtil.getStpLogic();
++        StpUtil.setStpLogic(new StpLogic("login") {
++            @Override public Object getLoginId() { return 42L; }
++        });
++        SaManager.setStpInterface(new StpInterface() {
++            public List<String> getPermissionList(Object id, String type) { return codes; }
++            public List<String> getRoleList(Object id, String type) { return roles; }
++        });
++    }
++    @AfterEach void tearDown() {
++        SaManager.setStpInterface(previous);
++        StpUtil.setStpLogic(previousLogic);
++    }
++    private void check(Class<?> controller, String name) {
++        var method = Arrays.stream(controller.getDeclaredMethods()).filter(m -> m.getName().equals(name)).findFirst().orElseThrow();
++        SaAnnotationStrategy.instance.checkMethodAnnotation.accept(method);
++    }
++    @Test void pagePermissionDoesNotGrantWriteOperations() {
++        codes = List.of("system:role", "system:user");
++        assertThrows(NotPermissionException.class, () -> check(SysRoleController.class, "addRole"));
++        assertThrows(NotPermissionException.class, () -> check(SysRoleController.class, "deleteRole"));
++        assertThrows(NotPermissionException.class, () -> check(SysRolePermissionController.class, "assignPermissions"));
++        assertThrows(NotPermissionException.class, () -> check(SysUserController.class, "rechargeBalance"));
++    }
++    @Test void arbitraryRoleCanUseOnlyItsGrantedOperation() {
++        codes = List.of("system:role:add");
++        assertDoesNotThrow(() -> check(SysRoleController.class, "addRole"));
++        assertThrows(NotPermissionException.class, () -> check(SysRoleController.class, "deleteRole"));
++    }
++    @Test void legacyAdminRoleDoesNotBypassOperationChecks() {
++        roles = List.of("ADMIN");
++        assertThrows(NotPermissionException.class, () -> check(SysUserController.class, "rechargeBalance"));
++    }
++    @Test void superAdminRetainsExplicitBypass() {
++        roles = List.of("SUPER_ADMIN");
++        assertDoesNotThrow(() -> check(SysRoleController.class, "deleteRole"));
++        assertDoesNotThrow(() -> OperationPermission.order("gift"));
++    }
++    @Test void revocationTakesEffectOnNextCheck() {
++        codes = List.of("system:user:reset-password");
++        check(SysUserController.class, "adminResetPassword");
++        codes = List.of();
++        assertThrows(NotPermissionException.class, () -> check(SysUserController.class, "adminResetPassword"));
++    }
++    @Test void compositeSensitiveFieldRequiresItsOwnPermission() {
++        codes = List.of("config:banner:edit");
++        assertDoesNotThrow(() -> OperationPermission.requireChange("config:banner:status", 1, 1));
++        assertDoesNotThrow(() -> OperationPermission.requireChange("config:banner:status", 1, null));
++        assertThrows(NotPermissionException.class, () -> OperationPermission.requireChange("config:banner:status", 1, 0));
++    }
++    @Test void cashierSettlementDoesNotGrantGiftOrRefund() {
++        codes = List.of("operations:direct-cashier:settle");
++        assertDoesNotThrow(() -> OperationPermission.order("settle"));
++        assertThrows(NotPermissionException.class, () -> OperationPermission.order("gift"));
++        assertThrows(NotPermissionException.class, () -> OperationPermission.order("refund"));
++    }
++}
+diff --git a/sql/vertical-split/16_operation_permissions.sql b/sql/vertical-split/16_operation_permissions.sql
+index e69de29..de51f39 100644
+--- /dev/null
++++ b/sql/vertical-split/16_operation_permissions.sql
+@@ -0,0 +1,174 @@
++-- 操作权限升级。先执行 01~15 对应结构及菜单补丁，再执行本文件。
++-- 在发布新版后端之前执行；首次为原来拥有菜单的角色保留其原有操作能力。
++-- 仅给本次新增权限补齐旧授权，重跑不会恢复已撤销的角色操作权限。
++USE liteshop_user;
++DROP PROCEDURE IF EXISTS migrate_operation_permissions_20260904;
++DELIMITER $$
++CREATE PROCEDURE migrate_operation_permissions_20260904()
++BEGIN
++  DECLARE conflicts INT DEFAULT 0;
++  DECLARE EXIT HANDLER FOR SQLEXCEPTION
++  BEGIN
++    ROLLBACK;
++    DROP TEMPORARY TABLE IF EXISTS tmp_operation_seed;
++    DROP TEMPORARY TABLE IF EXISTS tmp_operation_grants;
++    RESIGNAL;
++  END;
++  CREATE TEMPORARY TABLE tmp_operation_seed (
++    id BIGINT PRIMARY KEY, code VARCHAR(100), parent_code VARCHAR(100), title VARCHAR(100), sort INT
++  );
++  INSERT INTO tmp_operation_seed VALUES
++    (900000, 'config:banner:add', 'config:banner', '新增', 1),
++    (900001, 'config:banner:delete', 'config:banner', '删除', 2),
++    (900002, 'config:banner:edit', 'config:banner', '编辑', 3),
++    (900003, 'config:banner:status', 'config:banner', '调整状态', 4),
++    (900004, 'config:basic:add', 'config:basic', '新增', 5),
++    (900005, 'config:basic:delete', 'config:basic', '删除', 6),
++    (900006, 'config:basic:edit', 'config:basic', '编辑', 7),
++    (900007, 'config:basic:refresh', 'config:basic', '刷新配置缓存', 8),
++    (900008, 'marketing:coupon:add', 'marketing:coupon', '新增', 9),
++    (900009, 'marketing:coupon:delete', 'marketing:coupon', '删除', 10),
++    (900010, 'marketing:coupon:edit', 'marketing:coupon', '编辑', 11),
++    (900011, 'marketing:coupon:send', 'marketing:coupon', '发放优惠券', 12),
++    (900012, 'marketing:coupon:status', 'marketing:coupon', '调整状态', 13),
++    (900013, 'marketing:coupon:verify', 'marketing:coupon', '核销优惠券', 14),
++    (900014, 'marketing:lottery:add', 'marketing:lottery', '新增', 15),
++    (900015, 'marketing:lottery:chance', 'marketing:lottery', '调整抽奖次数', 16),
++    (900016, 'marketing:lottery:clear-records', 'marketing:lottery', '清空抽奖记录', 17),
++    (900017, 'marketing:lottery:delete', 'marketing:lottery', '删除', 18),
++    (900018, 'marketing:lottery:edit', 'marketing:lottery', '编辑', 19),
++    (900019, 'marketing:lottery:prize', 'marketing:lottery', '维护奖品', 20),
++    (900020, 'marketing:lottery:status', 'marketing:lottery', '调整状态', 21),
++    (900021, 'marketing:lottery:stock', 'marketing:lottery', '调整奖品库存', 22),
++    (900022, 'operations:console:add-items', 'operations:console', '提交订单 / 加菜', 23),
++    (900023, 'operations:console:cancel', 'operations:console', '取消订单', 24),
++    (900024, 'operations:console:clear', 'operations:console', '清空会话', 25),
++    (900025, 'operations:console:delete', 'operations:console', '删除', 26),
++    (900026, 'operations:console:discount', 'operations:console', '收银折扣', 27),
++    (900027, 'operations:console:gift', 'operations:console', '赠菜', 28),
++    (900028, 'operations:console:open', 'operations:console', '开桌', 29),
++    (900029, 'operations:console:refund', 'operations:console', '退菜', 30),
++    (900030, 'operations:console:settle', 'operations:console', '结算收款', 31),
++    (900031, 'operations:console:status', 'operations:console', '调整状态', 32),
++    (900032, 'operations:direct-cashier:add-items', 'operations:direct-cashier', '提交订单 / 加菜', 33),
++    (900033, 'operations:direct-cashier:cancel', 'operations:direct-cashier', '取消订单', 34),
++    (900034, 'operations:direct-cashier:delete', 'operations:direct-cashier', '删除', 35),
++    (900035, 'operations:direct-cashier:discount', 'operations:direct-cashier', '收银折扣', 36),
++    (900036, 'operations:direct-cashier:gift', 'operations:direct-cashier', '赠菜', 37),
++    (900037, 'operations:direct-cashier:print', 'operations:direct-cashier', '打印', 38),
++    (900038, 'operations:direct-cashier:refund', 'operations:direct-cashier', '退菜', 39),
++    (900039, 'operations:direct-cashier:settle', 'operations:direct-cashier', '结算收款', 40),
++    (900040, 'operations:direct-cashier:status', 'operations:direct-cashier', '调整状态', 41),
++    (900041, 'operations:direct-cashier:verify', 'operations:direct-cashier', '核销优惠券', 42),
++    (900042, 'operations:table-cashier:add-items', 'operations:table-cashier', '提交订单 / 加菜', 43),
++    (900043, 'operations:table-cashier:cancel', 'operations:table-cashier', '取消订单', 44),
++    (900044, 'operations:table-cashier:clear', 'operations:table-cashier', '清空会话', 45),
++    (900045, 'operations:table-cashier:delete', 'operations:table-cashier', '删除', 46),
++    (900046, 'operations:table-cashier:discount', 'operations:table-cashier', '收银折扣', 47),
++    (900047, 'operations:table-cashier:gift', 'operations:table-cashier', '赠菜', 48),
++    (900048, 'operations:table-cashier:open', 'operations:table-cashier', '开桌', 49),
++    (900049, 'operations:table-cashier:print', 'operations:table-cashier', '打印', 50),
++    (900050, 'operations:table-cashier:refund', 'operations:table-cashier', '退菜', 51),
++    (900051, 'operations:table-cashier:settle', 'operations:table-cashier', '结算收款', 52),
++    (900052, 'operations:table-cashier:status', 'operations:table-cashier', '调整状态', 53),
++    (900053, 'operations:table-cashier:verify', 'operations:table-cashier', '核销优惠券', 54),
++    (900054, 'operations:templates:add', 'operations:templates', '新增', 55),
++    (900055, 'operations:templates:default', 'operations:templates', '设置默认模板', 56),
++    (900056, 'operations:templates:delete', 'operations:templates', '删除', 57),
++    (900057, 'operations:templates:edit', 'operations:templates', '编辑', 58),
++    (900058, 'operations:templates:status', 'operations:templates', '调整状态', 59),
++    (900059, 'operations:verify-record:verify', 'operations:verify-record', '核销优惠券', 60),
++    (900060, 'restaurant:category:add', 'restaurant:category', '新增', 61),
++    (900061, 'restaurant:category:delete', 'restaurant:category', '删除', 62),
++    (900062, 'restaurant:category:edit', 'restaurant:category', '编辑', 63),
++    (900063, 'restaurant:dish:add', 'restaurant:dish', '新增', 64),
++    (900064, 'restaurant:dish:delete', 'restaurant:dish', '删除', 65),
++    (900065, 'restaurant:dish:edit', 'restaurant:dish', '编辑', 66),
++    (900066, 'restaurant:dish:spec', 'restaurant:dish', '维护菜品规格', 67),
++    (900067, 'restaurant:order:add-items', 'restaurant:order', '提交订单 / 加菜', 68),
++    (900068, 'restaurant:order:cancel', 'restaurant:order', '取消订单', 69),
++    (900069, 'restaurant:order:delete', 'restaurant:order', '删除', 70),
++    (900070, 'restaurant:order:discount', 'restaurant:order', '收银折扣', 71),
++    (900071, 'restaurant:order:gift', 'restaurant:order', '赠菜', 72),
++    (900072, 'restaurant:order:print', 'restaurant:order', '打印', 73),
++    (900073, 'restaurant:order:refund', 'restaurant:order', '退菜', 74),
++    (900074, 'restaurant:order:settle', 'restaurant:order', '结算收款', 75),
++    (900075, 'restaurant:order:status', 'restaurant:order', '调整状态', 76),
++    (900076, 'restaurant:printer:add', 'restaurant:printer', '新增', 77),
++    (900077, 'restaurant:printer:delete', 'restaurant:printer', '删除', 78),
++    (900078, 'restaurant:printer:edit', 'restaurant:printer', '编辑', 79),
++    (900079, 'restaurant:printer:print', 'restaurant:printer', '打印', 80),
++    (900080, 'restaurant:printer:status', 'restaurant:printer', '调整状态', 81),
++    (900081, 'restaurant:printer:sync', 'restaurant:printer', '同步设备状态', 82),
++    (900082, 'restaurant:store:add', 'restaurant:store', '新增', 83),
++    (900083, 'restaurant:store:delete', 'restaurant:store', '删除', 84),
++    (900084, 'restaurant:store:edit', 'restaurant:store', '编辑', 85),
++    (900085, 'restaurant:store:status', 'restaurant:store', '调整状态', 86),
++    (900086, 'restaurant:table:add', 'restaurant:table', '新增', 87),
++    (900087, 'restaurant:table:clear', 'restaurant:table', '清空会话', 88),
++    (900088, 'restaurant:table:delete', 'restaurant:table', '删除', 89),
++    (900089, 'restaurant:table:edit', 'restaurant:table', '编辑', 90),
++    (900090, 'restaurant:table:open', 'restaurant:table', '开桌', 91),
++    (900091, 'restaurant:table:settle', 'restaurant:table', '结算收款', 92),
++    (900092, 'restaurant:table:status', 'restaurant:table', '调整状态', 93),
++    (900093, 'system:level:add', 'system:level', '新增', 94),
++    (900094, 'system:level:delete', 'system:level', '删除', 95),
++    (900095, 'system:level:edit', 'system:level', '编辑', 96),
++    (900096, 'system:level:scheme-activate', 'system:level', '启用等级方案', 97),
++    (900097, 'system:level:scheme-add', 'system:level', '新建 / 引用等级方案', 98),
++    (900098, 'system:level:scheme-delete', 'system:level', '删除等级方案', 99),
++    (900099, 'system:level:scheme-edit', 'system:level', '编辑等级方案', 100),
++    (900100, 'system:level:status', 'system:level', '调整状态', 101),
++    (900101, 'system:role:add', 'system:role', '新增', 102),
++    (900102, 'system:role:assign', 'system:role', '分配权限', 103),
++    (900103, 'system:role:delete', 'system:role', '删除', 104),
++    (900104, 'system:role:edit', 'system:role', '编辑', 105),
++    (900105, 'system:user-store:assign', 'system:user-store', '分配权限', 106),
++    (900106, 'system:user:add', 'system:user', '新增', 107),
++    (900107, 'system:user:assign-role', 'system:user', '分配用户角色', 108),
++    (900108, 'system:user:delete', 'system:user', '删除', 109),
++    (900109, 'system:user:edit', 'system:user', '编辑', 110),
++    (900110, 'system:user:level', 'system:user', '调整会员等级', 111),
++    (900111, 'system:user:points-delete', 'system:user', '删除积分记录', 112),
++    (900112, 'system:user:recharge', 'system:user', '余额充值', 113),
++    (900113, 'system:user:reset-password', 'system:user', '重置密码', 114);
++  START TRANSACTION;
++  SELECT COUNT(*) INTO conflicts FROM tmp_operation_seed s
++    LEFT JOIN sys_permission p ON p.permission_code = s.parent_code
++    WHERE p.id IS NULL OR p.permission_type <> 1;
++  IF conflicts > 0 THEN
++    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '缺少父菜单，请先补齐菜单数据后重试';
++  END IF;
++  SELECT COUNT(*) INTO conflicts FROM tmp_operation_seed s
++    INNER JOIN sys_permission p ON p.permission_code = s.code
++    INNER JOIN sys_permission parent ON parent.permission_code = s.parent_code
++    WHERE p.permission_type <> 2 OR p.parent_id <> parent.id;
++  IF conflicts > 0 THEN
++    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '已有同编码权限的类型或上级不一致，请先核对';
++  END IF;
++  DELETE s FROM tmp_operation_seed s INNER JOIN sys_permission p ON p.permission_code = s.code;
++  SELECT COUNT(*) INTO conflicts FROM tmp_operation_seed s INNER JOIN sys_permission p ON p.id = s.id;
++  IF conflicts > 0 THEN
++    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '操作权限预置ID已被占用，请调整新增权限ID后重试';
++  END IF;
++  INSERT INTO sys_permission (id, permission_name, permission_code, parent_id, permission_type,
++    component_address, router_address, sort, status, is_hide, is_iframe, keep_alive)
++  SELECT s.id, s.title, s.code, p.id, 2, NULL, NULL, s.sort, 1, 0, 0, 0
++    FROM tmp_operation_seed s INNER JOIN sys_permission p ON p.permission_code = s.parent_code;
++  -- Materialize before inserting to avoid reading the target table in a NOT EXISTS subquery.
++  CREATE TEMPORARY TABLE tmp_operation_grants AS
++  SELECT DISTINCT rp.tenant_id, rp.role_id, s.id AS permission_id
++    FROM tmp_operation_seed s INNER JOIN sys_permission p ON p.permission_code = s.parent_code
++    INNER JOIN sys_role_permission rp ON rp.permission_id = p.id
++    INNER JOIN sys_role r ON r.id = rp.role_id
++    WHERE p.status = 1 AND r.role_code <> 'USER';
++  INSERT INTO sys_role_permission (tenant_id, role_id, permission_id)
++    SELECT tenant_id, role_id, permission_id FROM tmp_operation_grants;
++  COMMIT;
++  SELECT COUNT(*) AS added_operation_permissions FROM tmp_operation_seed;
++  DROP TEMPORARY TABLE tmp_operation_seed;
++  DROP TEMPORARY TABLE tmp_operation_grants;
++END$$
++DELIMITER ;
++CALL migrate_operation_permissions_20260904();
++DROP PROCEDURE migrate_operation_permissions_20260904;
