@@ -5,10 +5,14 @@ export interface SaasFeature {
   id?: Id
   featureCode: string
   featureName: string
-  featureType: 'BOOLEAN' | 'QUOTA'
+  featureType: 'BOOLEAN' | 'NUMBER' | 'QUOTA' | 'STRING' | 'ENUM'
   unit?: string
   quotaMode?: 'RESOURCE' | 'PERIODIC' | 'RATE' | 'CONCURRENT'
+  usageSource?: 'NONE' | 'COUNTER' | 'REALTIME'
+  usageMetric?: string
   defaultValue?: number
+  defaultTextValue?: string
+  allowedValues?: string
   description?: string
   status: number
 }
@@ -16,13 +20,30 @@ export interface SaasPlan {
   id?: Id
   planCode: string
   planName: string
+  targetCustomer?: string
+  coreBenefits?: string
   description?: string
+  recommended?: number
+  sortOrder?: number
+  status: number
+}
+export interface SaasDisplayFeature {
+  id?: Id
+  moduleCode: string
+  moduleName: string
+  featureCode: string
+  featureName: string
+  description?: string
+  sortOrder?: number
   status: number
 }
 export interface SaasPlanVersion {
   id: Id
   planId: Id
   versionNo: number
+  monthlyPrice?: number | null
+  yearlyPrice?: number | null
+  currency?: string
   status: 'DRAFT' | 'PUBLISHED' | 'RETIRED'
   publishedAt?: string
 }
@@ -32,6 +53,7 @@ export interface PlanEntitlement {
   featureId: Id
   enabled: number
   quotaValue?: number | null
+  textValue?: string | null
   unlimited: number
   resetPeriod: 'NONE' | 'DAY' | 'MONTH' | 'BILLING_CYCLE'
   enforcement: 'HARD' | 'SOFT'
@@ -41,7 +63,11 @@ export interface SaasAddon {
   addonCode: string
   addonName: string
   description?: string
+  monthlyPrice?: number | null
+  yearlyPrice?: number | null
+  currency?: string
   maxQuantity: number
+  sortOrder?: number
   status: number
 }
 export interface AddonEntitlement {
@@ -50,11 +76,14 @@ export interface AddonEntitlement {
   featureId: Id
   operation: 'ENABLE' | 'ADD' | 'SET'
   quotaValue?: number | null
+  textValue?: string | null
 }
 export interface TenantSubscription {
   id?: Id
   tenantId?: Id
   planVersionId: Id
+  billingCycle?: 'MONTHLY' | 'YEARLY' | 'CUSTOM'
+  autoRenew?: number
   status: string
   startAt?: string
   currentPeriodStart?: string
@@ -76,6 +105,7 @@ export interface EntitlementOverride {
   featureId: Id
   operation: 'ENABLE' | 'DISABLE' | 'ADD' | 'SET'
   quotaValue?: number | null
+  textValue?: string | null
   reason?: string
   effectiveFrom?: string
   effectiveTo?: string
@@ -84,11 +114,14 @@ export interface EffectiveEntitlementItem {
   featureId: Id
   featureCode: string
   featureName: string
-  featureType: 'BOOLEAN' | 'QUOTA'
+  featureType: 'BOOLEAN' | 'NUMBER' | 'QUOTA' | 'STRING' | 'ENUM'
   unit?: string
+  usageSource?: 'NONE' | 'COUNTER' | 'REALTIME'
+  usageMetric?: string
   enabled: boolean
   unlimited: boolean
   limit?: number | null
+  textValue?: string | null
   used?: number
   remaining?: number | null
   resetPeriod: string
@@ -108,11 +141,19 @@ export interface EffectiveEntitlements {
 }
 
 const root = '/saas/admin'
+export const getMyEntitlements = () =>
+  request.get<EffectiveEntitlements>({ url: '/saas/entitlements/me' })
 export const listSaasFeatures = () => request.get<SaasFeature[]>({ url: `${root}/features` })
 export const saveSaasFeature = (data: SaasFeature) =>
   data.id
     ? request.put<SaasFeature>({ url: `${root}/features`, data })
     : request.post<SaasFeature>({ url: `${root}/features`, data })
+export const listSaasDisplayFeatures = () =>
+  request.get<SaasDisplayFeature[]>({ url: `${root}/display-features` })
+export const saveSaasDisplayFeature = (data: SaasDisplayFeature) =>
+  data.id
+    ? request.put<SaasDisplayFeature>({ url: `${root}/display-features`, data })
+    : request.post<SaasDisplayFeature>({ url: `${root}/display-features`, data })
 export const listSaasPlans = () => request.get<SaasPlan[]>({ url: `${root}/plans` })
 export const saveSaasPlan = (data: SaasPlan) =>
   data.id
@@ -125,6 +166,10 @@ export const createPlanVersion = (planId: Id, copyFromVersionId?: Id) =>
     url: `${root}/plans/${planId}/versions`,
     params: { copyFromVersionId }
   })
+export const savePlanVersion = (versionId: Id, data: Partial<SaasPlanVersion>) =>
+  request.put<SaasPlanVersion>({ url: `${root}/plan-versions/${versionId}`, data })
+export const deletePlanVersion = (versionId: Id) =>
+  request.del<void>({ url: `${root}/plan-versions/${versionId}` })
 export const listPlanEntitlements = (versionId: Id) =>
   request.get<PlanEntitlement[]>({ url: `${root}/plan-versions/${versionId}/entitlements` })
 export const savePlanEntitlements = (versionId: Id, data: PlanEntitlement[]) =>

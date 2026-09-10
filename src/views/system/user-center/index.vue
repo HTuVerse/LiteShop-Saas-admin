@@ -117,7 +117,7 @@
           >
         </div>
 
-        <ElForm v-else ref="formRef" :model="form" :rules="rules" label-position="top">
+        <ArtForm v-else ref="formRef" :model="form" :rules="rules" label-position="top">
           <div class="edit-grid">
             <ElFormItem label="登录账号" prop="username">
               <ElInput v-model="form.username" :disabled="!canEdit" />
@@ -156,7 +156,7 @@
               />
             </ElFormItem>
           </div>
-        </ElForm>
+        </ArtForm>
       </section>
 
       <div class="detail-grid">
@@ -286,7 +286,7 @@
     return session.info.activeStoreId ? `门店 ${session.info.activeStoreId}` : '未选择门店'
   })
   const accountStatus = computed(() => (session.info.status === '0' ? '已停用' : '正常'))
-  const genderLabel = computed(() => ({ 0: '保密', 1: '男', 2: '女' }[form.gender] || '保密'))
+  const genderLabel = computed(() => ({ 0: '保密', 1: '男', 2: '女' })[form.gender] || '保密')
   const userAvatar = computed(() => resolveUserAvatar(session.info.avatar, form.gender))
   const canEdit = computed(() => !(session.isSuperAdmin && !!session.activeTenant))
   const maskedPhone = computed(() => {
@@ -414,7 +414,8 @@
     padding: 18px 12px 0;
     overflow: hidden;
     overscroll-behavior: contain;
-    background: radial-gradient(circle at 110% 14%, rgb(73 150 255 / 18%), transparent 36%),
+    background:
+      radial-gradient(circle at 110% 14%, rgb(73 150 255 / 18%), transparent 36%),
       linear-gradient(165deg, var(--el-bg-color) 0%, #eef6ff 65%, #dcecff 100%);
   }
 
@@ -598,7 +599,8 @@
     min-height: 130px;
     padding: 16px 235px 16px 20px;
     overflow: hidden;
-    background: radial-gradient(circle at 58% 0%, rgb(255 255 255 / 84%), transparent 34%),
+    background:
+      radial-gradient(circle at 58% 0%, rgb(255 255 255 / 84%), transparent 34%),
       linear-gradient(120deg, #eaf4ff 0%, #f4faff 54%, #dcecff 100%);
     border: 1px solid #dceaff;
     border-radius: 14px;
@@ -954,7 +956,9 @@
     cursor: pointer;
     border: 1px solid transparent;
     border-radius: 12px;
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    transition:
+      transform 0.2s ease,
+      box-shadow 0.2s ease;
   }
 
   .quick-grid button:hover {
@@ -1164,7 +1168,8 @@
 
   html.dark {
     .profile-nav {
-      background: radial-gradient(circle at 110% 14%, rgb(73 150 255 / 14%), transparent 36%),
+      background:
+        radial-gradient(circle at 110% 14%, rgb(73 150 255 / 14%), transparent 36%),
         linear-gradient(165deg, var(--el-bg-color) 0%, #15263c 100%);
     }
 

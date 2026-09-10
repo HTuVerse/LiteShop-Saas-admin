@@ -129,21 +129,68 @@
         <section class="panel-card reserved-card announcement-card">
           <header class="panel-heading">
             <div>
-              <span class="heading-icon notice"><ArtSvgIcon icon="ri:megaphone-line" /></span>
+              <span class="heading-illustration">
+                <img :src="announcementImage" alt="" aria-hidden="true" />
+              </span>
               <div><h2>公告栏</h2><p>平台与门店通知</p></div>
             </div>
-            <ElTag size="small" effect="plain">接口预留</ElTag>
+            <ElBadge :value="announcementUnread" :hidden="announcementUnread === 0">
+              <ElTag size="small" :type="announcementConnected ? 'success' : 'info'" effect="plain">
+                {{ announcementConnected ? '实时' : '同步中' }}
+              </ElTag>
+            </ElBadge>
           </header>
-          <div class="reserved-body">
+          <div
+            v-if="announcementLoading || announcements.length"
+            v-loading="announcementLoading"
+            class="announcement-body"
+          >
+            <button
+              v-for="item in dashboardAnnouncements"
+              :key="String(item.id)"
+              type="button"
+              :class="{ unread: !item.read }"
+              @click="openAnnouncement(item)"
+            >
+              <span class="announcement-item-illustration">
+                <img :src="announcementItemImage" alt="" aria-hidden="true" />
+              </span>
+              <span class="announcement-copy">
+                <span class="announcement-title-row">
+                  <strong>{{ item.title }}</strong>
+                  <span class="announcement-level" :class="item.level.toLowerCase()">
+                    {{ announcementLevelLabel[item.level] }}
+                  </span>
+                </span>
+                <small>
+                  {{ item.publisherName || `用户 ${item.publisherId}` }} ·
+                  {{ item.publishTime || item.createdAt }}
+                </small>
+              </span>
+              <span v-if="!item.read" class="unread-dot" aria-label="未读" />
+            </button>
+          </div>
+          <button
+            v-if="announcements.length > announcementPreviewLimit"
+            type="button"
+            class="announcement-more"
+            @click="openAnnouncementCenter"
+          >
+            查看更多消息
+            <ArtSvgIcon icon="ri:arrow-right-line" />
+          </button>
+          <div v-if="!announcementLoading && !announcements.length" class="reserved-body">
             <img :src="announcementImage" alt="公告栏插画" />
-            <div><strong>暂无公告</strong><p>公告接口接入后，将在这里展示最新通知。</p></div>
+            <div><strong>暂无公告</strong><p>平台或门店发布公告后，将实时显示在这里。</p></div>
           </div>
         </section>
 
         <section class="panel-card reserved-card message-card">
           <header class="panel-heading">
             <div>
-              <span class="heading-icon message"><ArtSvgIcon icon="ri:message-3-line" /></span>
+              <span class="heading-illustration">
+                <img :src="messageImage" alt="" aria-hidden="true" />
+              </span>
               <div><h2>消息中心</h2><p>订单、系统与业务消息</p></div>
             </div>
             <ElTag size="small" effect="plain">接口预留</ElTag>
@@ -155,6 +202,63 @@
         </section>
       </aside>
     </div>
+
+    <ElDialog
+      v-model="announcementDialogVisible"
+      title="公告中心"
+      width="min(980px, calc(100vw - 28px))"
+      append-to-body
+    >
+      <div class="announcement-center">
+        <aside class="announcement-center-list">
+          <header>
+            <strong>全部公告</strong>
+            <span>{{ announcements.length }} 条</span>
+          </header>
+          <div class="announcement-center-scroll">
+            <button
+              v-for="item in announcements"
+              :key="String(item.id)"
+              type="button"
+              :class="{
+                active: String(item.id) === String(selectedAnnouncement?.id),
+                unread: !item.read
+              }"
+              @click="selectAnnouncement(item)"
+            >
+              <span class="center-list-title">{{ item.title }}</span>
+              <small>
+                {{ item.publisherName || `用户 ${item.publisherId}` }} ·
+                {{ item.publishTime || item.createdAt }}
+              </small>
+              <i v-if="!item.read" aria-label="未读" />
+            </button>
+          </div>
+        </aside>
+        <div class="announcement-center-detail">
+          <AnnouncementDetailPanel :announcement="selectedAnnouncement" />
+          <div v-if="selectedAnnouncement" class="announcement-switch">
+            <ElButton
+              size="small"
+              plain
+              :disabled="selectedAnnouncementIndex <= 0"
+              @click="switchAnnouncement(-1)"
+            >
+              <ArtSvgIcon icon="ri:arrow-left-line" />上一条
+            </ElButton>
+            <span>{{ selectedAnnouncementIndex + 1 }} / {{ announcements.length }}</span>
+            <ElButton
+              size="small"
+              plain
+              :disabled="selectedAnnouncementIndex >= announcements.length - 1"
+              @click="switchAnnouncement(1)"
+            >
+              下一条<ArtSvgIcon icon="ri:arrow-right-line" />
+            </ElButton>
+          </div>
+        </div>
+      </div>
+    </ElDialog>
 
     <ElDialog
       v-model="shortcutDialogVisible"
@@ -200,20 +304,47 @@
   import { useRouter } from 'vue-router'
   import { useMenuStore } from '@/store/modules/menu'
   import { useUserStore } from '@/store/modules/user'
+  import { useAnnouncementStore } from '@/store/modules/announcement'
+  import type { Announcement, AnnouncementLevel } from '@/api/announcement'
+  import AnnouncementDetailPanel from '@/components/business/announcement-detail/index.vue'
   import { resolveUserAvatar } from '@/utils/user-avatar'
   import type { AppRouteRecord } from '@/types/router'
   import workspaceShop from '@/assets/images/brand/workspace-shop.png'
   import announcementImage from '@/assets/images/brand/announcement.png'
+  import announcementItemImage from '@/assets/images/brand/announcement-megaphone.png'
   import messageImage from '@/assets/images/brand/message-center.png'
 
   defineOptions({ name: 'Console' })
 
   const session = useUserStore()
+  const announcementStore = useAnnouncementStore()
+  const {
+    list: announcements,
+    unreadCount: announcementUnread,
+    connected: announcementConnected,
+    loading: announcementLoading
+  } = storeToRefs(announcementStore)
   const menu = useMenuStore()
   const router = useRouter()
   const { t } = useI18n()
   const quickLimit = 8
+  const announcementPreviewLimit = 5
   const shortcutDialogVisible = ref(false)
+  const announcementDialogVisible = ref(false)
+  const selectedAnnouncement = ref<Announcement>()
+  const announcementLevelLabel: Record<AnnouncementLevel, string> = {
+    NORMAL: '普通',
+    IMPORTANT: '重要',
+    URGENT: '紧急'
+  }
+  const dashboardAnnouncements = computed(() =>
+    announcements.value.slice(0, announcementPreviewLimit)
+  )
+  const selectedAnnouncementIndex = computed(() =>
+    announcements.value.findIndex(
+      (item) => String(item.id) === String(selectedAnnouncement.value?.id)
+    )
+  )
   const shortcutPaths = ref<string[]>([])
   const shortcutDraft = ref<string[]>([])
   const hour = new Date().getHours()
@@ -246,8 +377,8 @@
       node.children?.length
         ? flatten(node.children)
         : node.meta.isHide || node.path === '/dashboard/console'
-        ? []
-        : [node]
+          ? []
+          : [node]
     )
 
   const entries = computed(() => flatten(menu.menuList))
@@ -335,7 +466,35 @@
     }
   }
 
+  async function openAnnouncement(item: Announcement) {
+    announcementDialogVisible.value = true
+    await selectAnnouncement(item)
+  }
+
+  async function openAnnouncementCenter() {
+    announcementDialogVisible.value = true
+    if (selectedAnnouncementIndex.value < 0 && announcements.value.length) {
+      await selectAnnouncement(announcements.value[0])
+    }
+  }
+
+  async function selectAnnouncement(item: Announcement) {
+    selectedAnnouncement.value = item
+    await announcementStore.markRead(item).catch(() => undefined)
+  }
+
+  async function switchAnnouncement(offset: number) {
+    const target = announcements.value[selectedAnnouncementIndex.value + offset]
+    if (target) await selectAnnouncement(target)
+  }
+
   watch([entries, shortcutStorageKey], loadShortcutSettings, { immediate: true })
+  watch(announcements, (items) => {
+    if (!selectedAnnouncement.value) return
+    selectedAnnouncement.value = items.find(
+      (item) => String(item.id) === String(selectedAnnouncement.value?.id)
+    )
+  })
 </script>
 
 <style scoped lang="scss">
@@ -349,7 +508,8 @@
     padding: 14px 22px 12px;
     margin: -4px -8px 10px;
     overflow: hidden;
-    background: radial-gradient(circle at 46% 10%, rgb(255 255 255 / 92%), transparent 29%),
+    background:
+      radial-gradient(circle at 46% 10%, rgb(255 255 255 / 92%), transparent 29%),
       linear-gradient(110deg, #e9f5ff 0%, #f7fbff 50%, #d9edff 100%);
   }
 
@@ -415,7 +575,7 @@
   .welcome-banner > img {
     position: absolute;
     right: 0;
-    bottom: -54px;
+    bottom: -20px;
     width: min(29%, 300px);
     height: 190px;
     object-fit: contain;
@@ -635,14 +795,22 @@
     background: #e4f8f4;
   }
 
-  .heading-icon.notice {
-    color: #1676ec;
-    background: #e8f3ff;
+  .heading-illustration {
+    display: grid;
+    flex: 0 0 44px;
+    place-items: center;
+    width: 44px;
+    height: 38px;
+    overflow: hidden;
+    background: linear-gradient(145deg, #edf7ff, #f8fbff);
+    border: 1px solid rgb(64 158 255 / 14%);
+    border-radius: 10px;
   }
 
-  .heading-icon.message {
-    color: #7150e9;
-    background: #f0ebff;
+  .heading-illustration img {
+    width: 42px;
+    height: 36px;
+    object-fit: contain;
   }
 
   .quick-grid {
@@ -834,6 +1002,233 @@
     color: var(--el-text-color-secondary);
   }
 
+  .announcement-body {
+    display: grid;
+    gap: 6px;
+    min-height: 112px;
+  }
+
+  .announcement-body > button {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    width: 100%;
+    min-width: 0;
+    min-height: 52px;
+    padding: 6px 9px 6px 6px;
+    color: var(--el-text-color-primary);
+    text-align: left;
+    cursor: pointer;
+    background: var(--el-fill-color-extra-light);
+    border: 1px solid transparent;
+    border-radius: 10px;
+    transition: 0.2s ease;
+  }
+
+  .announcement-body > button:hover,
+  .announcement-body > button.unread {
+    background: var(--el-color-primary-light-9);
+    border-color: var(--el-color-primary-light-7);
+  }
+
+  .announcement-item-illustration {
+    display: grid;
+    flex: 0 0 42px;
+    place-items: center;
+    width: 42px;
+    height: 40px;
+    overflow: hidden;
+    background: linear-gradient(145deg, #eaf5ff, #fff);
+    border-radius: 10px;
+  }
+
+  .announcement-item-illustration img {
+    width: 42px;
+    height: 40px;
+    object-fit: contain;
+    transform: rotate(-4deg) scale(1.08);
+  }
+
+  .announcement-title-row {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    min-width: 0;
+  }
+
+  .announcement-level {
+    flex: 0 0 auto;
+    padding: 3px 6px;
+    font-size: 10px;
+    color: var(--el-color-primary);
+    background: var(--el-color-primary-light-9);
+    border-radius: 5px;
+  }
+
+  .announcement-level.important {
+    color: #b66a00;
+    background: #fff4db;
+  }
+
+  .announcement-level.urgent {
+    color: #d33b32;
+    background: #ffebe9;
+  }
+
+  .announcement-copy {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .announcement-copy strong,
+  .announcement-copy small {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .announcement-copy strong {
+    flex: 1;
+    min-width: 0;
+    font-size: 12px;
+  }
+
+  .announcement-copy small {
+    margin-top: 3px;
+    font-size: 10px;
+    color: var(--el-text-color-secondary);
+  }
+
+  .unread-dot {
+    flex: 0 0 7px;
+    width: 7px;
+    height: 7px;
+    background: var(--el-color-danger);
+    border-radius: 50%;
+  }
+
+  .announcement-more {
+    display: flex;
+    gap: 5px;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    padding: 9px 0 2px;
+    font-size: 12px;
+    color: var(--el-color-primary);
+    cursor: pointer;
+    background: transparent;
+    border: 0;
+  }
+
+  .announcement-more:hover {
+    color: var(--el-color-primary-dark-2);
+  }
+
+  .announcement-center {
+    display: grid;
+    grid-template-columns: 250px minmax(0, 1fr);
+    gap: 14px;
+    min-height: 410px;
+  }
+
+  .announcement-center-list {
+    overflow: hidden;
+    background: var(--el-fill-color-extra-light);
+    border: 1px solid var(--el-border-color-lighter);
+    border-radius: 12px;
+  }
+
+  .announcement-center-list > header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px;
+    border-bottom: 1px solid var(--el-border-color-lighter);
+  }
+
+  .announcement-center-list > header strong {
+    font-size: 14px;
+  }
+
+  .announcement-center-list > header span {
+    font-size: 11px;
+    color: var(--el-text-color-secondary);
+  }
+
+  .announcement-center-scroll {
+    max-height: 400px;
+    padding: 7px;
+    overflow-y: auto;
+  }
+
+  .announcement-center-scroll button {
+    position: relative;
+    display: block;
+    width: 100%;
+    padding: 10px 22px 10px 10px;
+    margin-bottom: 5px;
+    color: var(--el-text-color-primary);
+    text-align: left;
+    cursor: pointer;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 9px;
+  }
+
+  .announcement-center-scroll button:hover,
+  .announcement-center-scroll button.active {
+    background: var(--el-bg-color);
+    border-color: var(--el-color-primary-light-7);
+  }
+
+  .center-list-title,
+  .announcement-center-scroll small {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .center-list-title {
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .announcement-center-scroll small {
+    margin-top: 5px;
+    font-size: 10px;
+    color: var(--el-text-color-secondary);
+  }
+
+  .announcement-center-scroll i {
+    position: absolute;
+    top: 14px;
+    right: 10px;
+    width: 6px;
+    height: 6px;
+    background: var(--el-color-danger);
+    border-radius: 50%;
+  }
+
+  .announcement-center-detail {
+    min-width: 0;
+  }
+
+  .announcement-switch {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    justify-content: flex-end;
+    margin-top: 12px;
+  }
+
+  .announcement-switch span {
+    font-size: 11px;
+    color: var(--el-text-color-secondary);
+  }
+
   .dark .welcome-banner {
     background: linear-gradient(115deg, #14243d, #172b43 54%, #173b55);
   }
@@ -946,6 +1341,14 @@
 
     .quick-grid > button {
       min-height: 76px;
+    }
+
+    .announcement-center {
+      grid-template-columns: 1fr;
+    }
+
+    .announcement-center-scroll {
+      max-height: 190px;
     }
   }
 

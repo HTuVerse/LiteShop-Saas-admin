@@ -5,6 +5,9 @@ import globals from 'globals'
 
 const expectedRuntimeGlobals = [
   'define', // AMD feature detection in third-party editors
+  'ActiveXObject', // wangEditor/core-js legacy browser feature detection
+  'nodeCrypto', // wangEditor crypto polyfill's guarded Node.js fallback
+  'Prism', // wangEditor code-highlight plugin bundles Prism in the same lazy chunk
   'WorkerGlobalScope',
   'WebKitCSSMatrix',
   'wx', // optional WeChat runtime

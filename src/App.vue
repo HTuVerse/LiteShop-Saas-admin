@@ -13,6 +13,8 @@
 
 <script setup lang="ts">
   import { useUserStore } from './store/modules/user'
+  import { useEntitlementStore } from './store/modules/entitlement'
+  import { useAnnouncementStore } from './store/modules/announcement'
   import zh from 'element-plus/es/locale/lang/zh-cn'
   import en from 'element-plus/es/locale/lang/en'
   import { systemUpgrade } from './utils/sys'
@@ -26,6 +28,8 @@
   import { setPageTitle } from '@/utils/router'
 
   const userStore = useUserStore()
+  const entitlementStore = useEntitlementStore()
+  const announcementStore = useAnnouncementStore()
   const { language } = storeToRefs(userStore)
   const { locale } = useI18n()
   const route = useRoute()
@@ -54,6 +58,30 @@
     () => [website.systemName, website.seoTitle],
     () => setPageTitle(route)
   )
+  watch(
+    () => [userStore.isLogin, userStore.scopeKey] as const,
+    ([isLogin]) => {
+      const tenantId = userStore.activeTenant?.id || userStore.info.tenantId
+      if (!isLogin || !tenantId) {
+        entitlementStore.clear()
+        return
+      }
+      entitlementStore.refresh().catch(() => entitlementStore.clear())
+    },
+    { immediate: true }
+  )
+  watch(
+    () => [userStore.isLogin, userStore.scopeKey, userStore.accessToken] as const,
+    ([isLogin]) => {
+      if (!isLogin) {
+        announcementStore.clear()
+        return
+      }
+      announcementStore.refresh().catch(() => undefined)
+      announcementStore.connect()
+    },
+    { immediate: true }
+  )
 
   const locales = {
     zh: zh,
@@ -70,4 +98,5 @@
     toggleTransition(false)
     systemUpgrade()
   })
+  onBeforeUnmount(() => announcementStore.disconnect())
 </script>
