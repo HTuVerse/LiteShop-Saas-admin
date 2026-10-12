@@ -33,9 +33,13 @@
       <section class="amount-card">
         <span>应收金额</span>
         <strong>￥{{ formatMoney(cart.total) }}</strong>
-        <small v-if="cart.discountRate"
-          >原价 ￥{{ formatMoney(cartOriginalTotal) }} · {{ discountText }}</small
-        >
+        <small v-if="pricingDiscountAmount > 0 || cart.discountRate">
+          正常售价合计 ￥{{ formatMoney(cartOriginalTotal) }}
+          <template v-if="pricingDiscountAmount > 0">
+            · 活动/会员优惠 ￥{{ formatMoney(pricingDiscountAmount) }}
+          </template>
+          <template v-if="cart.discountRate"> · 人工{{ discountText }}</template>
+        </small>
       </section>
 
       <section class="payment-section">
@@ -64,6 +68,27 @@
             <img :src="method.illustration" alt="" />
           </button>
         </div>
+        <!-- 扫码支付（被扫）：收银员扫顾客付款码 -->
+        <div v-if="isScanMethod && !sessionNo" class="scan-pay-box">
+          <label>顾客付款码</label>
+          <ElInput
+            ref="authCodeInput"
+            v-model="authCode"
+            placeholder="请用扫码枪扫描顾客付款码，或手动输入后回车"
+            clearable
+            :disabled="payLoading"
+            @keyup.enter="handleConfirmPayment"
+          />
+          <small>请顾客打开{{ payMethod === 'wechat' ? '微信' : '支付宝' }}「付款码」对准扫码枪</small>
+        </div>
+        <ElAlert
+          v-else-if="isScanMethod && sessionNo"
+          title="桌位结算暂不支持扫码支付，请使用现金或会员余额收款"
+          type="info"
+          :closable="false"
+          show-icon
+          class="scan-pay-notice"
+        />
         <div v-if="balanceInsufficient" class="payment-warning">
           会员余额不足，还差 ￥{{
             formatMoney(cart.total - Number(cart.member?.surplusMoney || 0))
@@ -80,7 +105,7 @@
             type="primary"
             size="large"
             :loading="payLoading"
-            :disabled="balanceInsufficient"
+            :disabled="confirmDisabled"
             @click="handleConfirmPayment"
           >
             确认收款&nbsp; ￥{{ formatMoney(cart.total) }}
@@ -92,23 +117,24 @@
 </template>
 
 <script setup lang="ts">
-  import { ref, computed, watch, inject } from 'vue'
-  import { ElDialog, ElButton, ElCheckbox, ElMessage } from 'element-plus'
+  import { ref, computed, watch, inject, nextTick } from 'vue'
+  import { ElDialog, ElButton, ElCheckbox, ElInput, ElAlert, ElMessage } from 'element-plus'
   import { formatMoney } from '@/utils/cashier/utils'
   import {
     fetchCashierDirectOrder,
-    fetchCashierScanPay,
-    fetchCashierSettleSession
+    fetchCashierSettleSession,
+    fetchCashierScanPay
   } from '@/api/cashier'
+  import { fetchPricingQuote } from '@/api/pricing'
   import { useUserStore } from '@/store/modules/user'
-  import payWechat from '@/assets/images/cashier/pay-wechat.png'
-  import payAlipay from '@/assets/images/cashier/pay-alipay.png'
   import payBalance from '@/assets/images/cashier/pay-balance.png'
   import payCash from '@/assets/images/cashier/pay-cash.png'
-  import payCardWechat from '@/assets/images/cashier/pay-card-wechat.png'
-  import payCardAlipay from '@/assets/images/cashier/pay-card-alipay.png'
+  import payWechat from '@/assets/images/cashier/pay-wechat.png'
+  import payAlipay from '@/assets/images/cashier/pay-alipay.png'
   import payCardBalance from '@/assets/images/cashier/pay-card-balance.png'
   import payCardCash from '@/assets/images/cashier/pay-card-cash.png'
+  import payCardWechat from '@/assets/images/cashier/pay-card-wechat.png'
+  import payCardAlipay from '@/assets/images/cashier/pay-card-alipay.png'
 
   const cashierStoreId = inject<import('vue').Ref<number | undefined>>('cashierStoreId')
   // Props
@@ -124,7 +150,7 @@
   // 注入数据
   const { cart } = inject<any>('cart')
 
-  type PayMethod = 'wechat' | 'alipay' | 'balance' | 'cash'
+  type PayMethod = 'balance' | 'cash' | 'wechat' | 'alipay'
   const userStore = useUserStore()
   const orderNo = ref('')
   const orderTime = ref('')
@@ -142,15 +168,15 @@
   }> = [
     {
       value: 'wechat',
-      label: '微信支付',
-      description: '推荐使用微信支付，安全便捷',
+      label: '微信扫码',
+      description: '扫描顾客微信付款码收款',
       illustration: payWechat,
       background: payCardWechat
     },
     {
       value: 'alipay',
-      label: '支付宝',
-      description: '支持扫码、转账等多种支付方式',
+      label: '支付宝扫码',
+      description: '扫描顾客支付宝付款码收款',
       illustration: payAlipay,
       background: payCardAlipay
     },
@@ -169,7 +195,7 @@
       background: payCardCash
     }
   ]
-  const payMethod = ref<PayMethod>('wechat')
+  const payMethod = ref<PayMethod>('cash')
   const cashierName = computed(() => {
     const info = userStore.info as any
     return info.nickname || info.realName || info.username || '收银员'
@@ -179,6 +205,21 @@
       payMethod.value === 'balance' &&
       (!cart.member || Number(cart.member.surplusMoney || 0) < Number(cart.total || 0))
   )
+
+  // 扫码支付（被扫）：顾客付款码，由扫码枪读取，一次性
+  const authCode = ref('')
+  const authCodeInput = ref<InstanceType<typeof ElInput>>()
+  // 是否为扫码支付方式（微信/支付宝被扫）
+  const isScanMethod = computed(() => payMethod.value === 'wechat' || payMethod.value === 'alipay')
+  // 确认收款按钮禁用：余额不足 / 桌位不支持扫码 / 扫码未录入付款码
+  const confirmDisabled = computed(() => {
+    if (balanceInsufficient.value) return true
+    if (isScanMethod.value) {
+      if (props.sessionNo) return true
+      if (!authCode.value.trim()) return true
+    }
+    return false
+  })
 
   // 实收金额
   const actualPayment = ref(0)
@@ -191,6 +232,7 @@
 
   // 计算原价总额（不含折扣和赠菜）
   const cartOriginalTotal = computed(() => {
+    if (quotedListAmount.value > 0) return quotedListAmount.value.toFixed(2)
     let total = 0
     cart.commodity.forEach((item: any) => {
       if (!item.isGift) {
@@ -212,10 +254,70 @@
 
   // 加载状态
   const payLoading = ref(false)
+  // 网络重试复用同一个键，避免余额/现金重复收款生成两笔订单。
+  const directOrderIdempotencyKey = ref(crypto.randomUUID())
+  const pricingDiscountAmount = ref(0)
+  const quotedListAmount = ref(0)
+
+  const refreshPricingQuote = async () => {
+    pricingDiscountAmount.value = 0
+    quotedListAmount.value = 0
+    if (props.sessionNo || !cashierStoreId?.value || !cart.commodity?.length) return
+    const items = cart.commodity
+      .map((item: any, index: number) => ({ item, index }))
+      .filter(({ item }: any) => !item.isGift)
+    if (!items.length) {
+      cart.total = 0
+      return
+    }
+    try {
+      const quote = await fetchPricingQuote({
+        storeId: cashierStoreId.value,
+        userId: cart.member?.id,
+        channel: 'CASHIER',
+        items: items.map(({ item, index }: any) => ({
+          lineKey: String(index),
+          dishId: item.id,
+          quantity: item.number,
+          specExtraPrice: Array.isArray(item.selectedSpecs)
+            ? item.selectedSpecs.reduce(
+                (sum: number, spec: any) => sum + Number(spec.priceAdjust || 0),
+                0
+              )
+            : 0
+        }))
+      })
+      quote.lines.forEach((line) => {
+        const item = cart.commodity[Number(line.lineKey)]
+        if (!item) return
+        item.price = Number(line.unitSellingPrice)
+        item.lineListAmount = Number(line.lineListAmount)
+        item.lineDiscountAmount = Number(line.lineDiscountAmount)
+        item.linePayableAmount = Number(line.linePayableAmount)
+        item.pricingAdjustments = line.adjustments
+        item.availableCampaigns = line.availableCampaigns || []
+      })
+      quotedListAmount.value = Number(quote.listAmount)
+      pricingDiscountAmount.value = Number(quote.campaignDiscountAmount)
+      const payable = Number(quote.payableAmount)
+      cart.total = Number((cart.discountRate ? payable * cart.discountRate : payable).toFixed(2))
+      actualPayment.value = cart.total
+    } catch (error: any) {
+      ElMessage.error(error?.message || '服务端试价失败，请刷新菜品后重试')
+    }
+  }
 
   const selectPayment = (method: PayMethod) => {
     payMethod.value = method
     if (method === 'balance' && !cart.member) ElMessage.warning('余额支付需要先选择会员')
+    if (method === 'wechat' || method === 'alipay') {
+      if (props.sessionNo) {
+        ElMessage.warning('桌位结算暂不支持扫码支付')
+        return
+      }
+      // 选中扫码方式后自动聚焦输入框，方便扫码枪直接录入
+      nextTick(() => authCodeInput.value?.focus())
+    }
   }
 
   // 余额支付确认
@@ -240,12 +342,12 @@
     try {
       // 构建订单数据
       const orderData = {
+        idempotencyKey: directOrderIdempotencyKey.value,
         userId: cart.member.id,
         tableId: props.tableId,
         sessionNo: props.sessionNo,
         orderType: 0, // 在线点餐
         totalPrice: cart.total,
-        actualAmount: cart.total,
         discountRate: cart.discountRate || null,
         storeId: cashierStoreId?.value,
         paymentType: 6, // 余额支付
@@ -260,7 +362,7 @@
 
           // basePrice 是菜品的基础价格（不含规格）
           // 优先使用活动价，如果没有活动价则使用原价
-          const basePrice = item.activityPrice > 0 ? item.activityPrice : item.originalPrice
+          const basePrice = item.salePrice
 
           return {
             dishId: item.id,
@@ -313,14 +415,27 @@
     }
   }
 
+  const handleConfirmPayment = () => {
+    if (payMethod.value === 'balance') {
+      handleBalanceConfirm()
+    } else if (isScanMethod.value) {
+      handleScanConfirm()
+    } else {
+      actualPayment.value = cart.total
+      handleCashConfirm()
+    }
+  }
+
+  // 构建下单的购物车明细（扫码/现金通用）
   const buildCartItems = () =>
     cart.commodity.map((item: any) => {
-      const extraPrice = Array.isArray(item.selectedSpecs)
-        ? item.selectedSpecs.reduce(
-            (sum: number, spec: any) => sum + Number(spec.priceAdjust || 0),
-            0
-          )
-        : 0
+      let extraPrice = 0
+      if (item.selectedSpecs && Array.isArray(item.selectedSpecs)) {
+        extraPrice = item.selectedSpecs.reduce(
+          (sum: number, spec: any) => sum + (spec.priceAdjust || 0),
+          0
+        )
+      }
       return {
         dishId: item.id,
         dishName: item.dishName || item.name,
@@ -329,56 +444,60 @@
         specText: item.specText || '',
         categoryId: item.categoryId,
         categoryName: item.categoryName,
-        basePrice: item.activityPrice > 0 ? item.activityPrice : item.originalPrice,
-        extraPrice,
+        basePrice: item.salePrice, // 菜品基础价格
+        extraPrice, // 规格额外价格
         isGift: item.isGift ? 1 : 0
       }
     })
 
+  // 扫码支付确认（被扫：收银员扫顾客付款码）
   const handleScanConfirm = async () => {
     if (payLoading.value) return
     if (!cashierStoreId?.value) {
       ElMessage.warning('请先选择收银门店')
       return
     }
+    if (props.sessionNo) {
+      ElMessage.warning('桌位结算暂不支持扫码支付')
+      return
+    }
+    const code = authCode.value.trim()
+    if (!code) {
+      ElMessage.warning('请扫描顾客付款码')
+      authCodeInput.value?.focus()
+      return
+    }
+
     payLoading.value = true
     try {
-      const result: any = await fetchCashierScanPay({
-        storeId: cashierStoreId.value,
-        tableId: props.tableId,
-        sessionNo: props.sessionNo,
+      const res: any = await fetchCashierScanPay({
+        idempotencyKey: directOrderIdempotencyKey.value,
         userId: cart.member?.id,
+        tableId: props.tableId,
         orderType: 0,
         totalPrice: cart.total,
-        discountRate: cart.discountRate || null,
-        paymentType: payMethod.value === 'wechat' ? 1 : 2,
+        storeId: cashierStoreId.value,
+        paymentType: payMethod.value === 'wechat' ? 1 : 2, // 1-微信，2-支付宝
+        authCode: code,
         cartItems: buildCartItems(),
         note: cart.note || '',
         printReceipt: printReceipt.value
       })
-      if (!result) throw new Error('支付通道暂无响应')
-      if (result.paid === true || Number(result.status) === 2) {
-        ElMessage.success('支付成功')
-        handlePaySuccess()
-      } else {
-        ElMessage.success('支付单已创建，请提示顾客完成扫码')
+      const order = res?.order || res
+      if (!order?.id) {
+        throw new Error('支付失败')
       }
+      ElMessage.success(
+        `${payMethod.value === 'wechat' ? '微信' : '支付宝'}收款成功！订单号：${order.orderNo || order.id}`
+      )
+      handlePaySuccess()
     } catch (error: any) {
-      console.error('扫码支付失败:', error)
-      ElMessage.error(error.message || error.msg || '扫码支付失败')
+      // 付款码一次性，失败后清空以便重新扫码
+      authCode.value = ''
+      nextTick(() => authCodeInput.value?.focus())
+      ElMessage.error(error.message || error.msg || '扫码支付失败，请重试')
     } finally {
       payLoading.value = false
-    }
-  }
-
-  const handleConfirmPayment = () => {
-    if (payMethod.value === 'balance') {
-      handleBalanceConfirm()
-    } else if (payMethod.value === 'cash') {
-      actualPayment.value = cart.total
-      handleCashConfirm()
-    } else {
-      handleScanConfirm()
     }
   }
 
@@ -391,8 +510,10 @@
 
   // 重置状态
   const resetState = () => {
-    payMethod.value = 'wechat'
+    payMethod.value = 'cash'
     actualPayment.value = 0
+    authCode.value = ''
+    directOrderIdempotencyKey.value = crypto.randomUUID()
   }
 
   // 支付成功
@@ -417,6 +538,7 @@
     try {
       // 构建订单数据
       const orderData = {
+        idempotencyKey: directOrderIdempotencyKey.value,
         userId: cart.member?.id,
         tableId: props.tableId,
         sessionNo: props.sessionNo,
@@ -437,7 +559,7 @@
 
           // basePrice 是菜品的基础价格（不含规格）
           // 优先使用活动价，如果没有活动价则使用原价
-          const basePrice = item.activityPrice > 0 ? item.activityPrice : item.originalPrice
+          const basePrice = item.salePrice
 
           return {
             dishId: item.id,
@@ -502,7 +624,8 @@
     (val) => {
       if (val) {
         actualPayment.value = cart.total
-        payMethod.value = 'wechat'
+        payMethod.value = 'cash'
+        authCode.value = ''
         const now = new Date()
         const two = (value: number) => String(value).padStart(2, '0')
         const datePart = `${now.getFullYear()}${two(now.getMonth() + 1)}${two(now.getDate())}`
@@ -511,6 +634,7 @@
         orderTime.value = `${now.getFullYear()}-${two(now.getMonth() + 1)}-${two(
           now.getDate()
         )} ${two(now.getHours())}:${two(now.getMinutes())}`
+        void refreshPricingQuote()
       }
     }
   )
@@ -621,8 +745,7 @@
     padding: 14px 20px;
     margin-bottom: 14px;
     overflow: hidden;
-    background:
-      radial-gradient(circle at 15% 130%, rgb(70 128 255 / 19%), transparent 47%),
+    background: radial-gradient(circle at 15% 130%, rgb(70 128 255 / 19%), transparent 47%),
       radial-gradient(circle at 95% -30%, rgb(116 167 255 / 22%), transparent 44%),
       linear-gradient(135deg, var(--el-color-primary-light-9), var(--el-color-primary-light-8));
     border: 1px solid color-mix(in srgb, var(--el-color-primary) 18%, transparent);
@@ -693,20 +816,20 @@
     border-radius: 16px;
     transition: 0.2s ease;
 
-    &.wechat {
-      background-color: #edfff6;
-    }
-
-    &.alipay {
-      background-color: #edf6ff;
-    }
-
     &.balance {
       background-color: #f5f1ff;
     }
 
     &.cash {
       background-color: #fff6e9;
+    }
+
+    &.wechat {
+      background-color: #eafaf0;
+    }
+
+    &.alipay {
+      background-color: #e9f2ff;
     }
 
     > div {
@@ -758,13 +881,34 @@
       box-shadow: 0 10px 24px color-mix(in srgb, var(--el-color-primary) 14%, transparent);
       transform: translateY(-1px);
     }
+  }
 
-    &.wechat.active {
-      border-color: var(--el-color-success);
+  .scan-pay-notice {
+    margin-top: 8px;
+  }
 
-      .selected-mark {
-        background: var(--el-color-success);
-      }
+  .scan-pay-box {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 12px 14px;
+    margin-top: 10px;
+    background: var(--el-fill-color-light);
+    border: 1px solid var(--el-border-color-lighter);
+    border-radius: 12px;
+
+    label {
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    small {
+      font-size: 11px;
+      color: var(--el-text-color-secondary);
+    }
+
+    :deep(.el-input__wrapper) {
+      border-radius: 10px;
     }
   }
 

@@ -11,7 +11,7 @@ import type { Id } from '@/types/backend'
 export async function fetchCategoryList(params?: {
   currentPage?: number
   pageSize?: number
-  storeId?: number
+  storeId?: Id
 }) {
   if (!params?.storeId) return { records: [], total: 0 }
   const categories: any[] = []
@@ -20,19 +20,16 @@ export async function fetchCategoryList(params?: {
   do {
     const page = await request.get<Api.Common.PageResult<any>>({
       url: '/dish/category/pageList',
-      params: { currentPage, pageSize: 100, isShow: 1 }
+      params: { currentPage, pageSize: 100, isShow: 1, storeId: params.storeId }
     })
     categories.push(...page.records)
     total = page.total
     if (!page.records.length) break
     currentPage++
   } while (categories.length < total)
-  const filtered = categories.filter(
-    (category) => String(category.storeId) === String(params.storeId)
-  )
   const size = params.pageSize || 50,
     start = ((params.currentPage || 1) - 1) * size
-  return { records: filtered.slice(start, start + size), total: filtered.length }
+  return { records: categories.slice(start, start + size), total: categories.length }
 }
 
 /**
@@ -41,7 +38,9 @@ export async function fetchCategoryList(params?: {
  * @param isListBySort 是否按分类分组：0-直接返回，1-按分类分组
  * @returns 菜品列表
  */
-export async function fetchDishList(searchKey = '', _isListBySort = 0, storeId?: number) {
+export async function fetchDishList(searchKey = '', _isListBySort = 0, storeId?: Id) {
+  // 保留分组参数以兼容既有调用；收银台当前统一消费扁平菜品列表。
+  void _isListBySort
   if (!storeId) return []
   const records: any[] = []
   let currentPage = 1
@@ -73,7 +72,7 @@ export async function fetchDishList(searchKey = '', _isListBySort = 0, storeId?:
 export function fetchDishPageList(params: {
   currentPage?: number
   pageSize?: number
-  categoryId?: number
+  categoryId?: Id
   dishName?: string
   saleStatus?: number
 }) {
@@ -124,18 +123,19 @@ export function fetchCashierMemberByPhone(phone: string) {
  * @param data 订单数据
  * @returns 订单信息
  */
-export function fetchCreateOrder(data: {
-  storeId?: number
-  tableId?: number
-  userId?: number
+export interface CreateOrderPayload {
+  idempotencyKey: string
+  storeId?: Id
+  tableId?: Id
+  userId?: Id
   sessionNo?: string
   orderType?: number
   peopleCount?: number
   totalPrice: number
   cartItems: Array<{
     cartItemId?: string
-    dishId: number
-    categoryId?: string
+    dishId: Id
+    categoryId?: Id
     dishName: string
     price: number
     basePrice?: number
@@ -143,11 +143,25 @@ export function fetchCreateOrder(data: {
     categoryName?: string
     specText?: string
     quantity: number
+    isGift?: number
   }>
   note?: string
-}) {
-  return request.post({
+}
+
+export function fetchCreateOrder(data: CreateOrderPayload) {
+  return request.post<Api.Order.OrderDetailVO>({
     url: '/restaurant-order/create',
+    data
+  })
+}
+
+/**
+ * 收银员代会员创建订单。普通创建接口会把 userId 强制替换为当前操作员，
+ * 因此只有明确选择会员时才能调用本接口。
+ */
+export function fetchCashierProxyOrder(data: CreateOrderPayload & { userId: Id }) {
+  return request.post<Api.Order.OrderDetailVO>({
+    url: '/restaurant-order/cashier/proxyOrder',
     data
   })
 }
@@ -158,12 +172,12 @@ export function fetchCreateOrder(data: {
  * @returns 更新后的订单信息
  */
 export function fetchAddItemsToOrder(data: {
-  orderId: number
+  orderId: Id
   sessionNo?: string
   cartItems: Array<{
     cartItemId?: string
-    dishId: number
-    categoryId?: string
+    dishId: Id
+    categoryId?: Id
     dishName: string
     price: number
     basePrice?: number
@@ -175,7 +189,7 @@ export function fetchAddItemsToOrder(data: {
   }>
   note?: string
 }) {
-  return request.post({
+  return request.post<Api.Order.OrderDetailVO>({
     url: '/restaurant-order/addItems',
     data
   })
@@ -187,8 +201,8 @@ export function fetchAddItemsToOrder(data: {
  * @returns 支付参数
  */
 export function fetchIssuePay(data: {
-  orderId: number
-  paymentType: number // 1-微信支付，2-支付宝，3-现金，4-余额支付
+  orderId: Id
+  paymentType: number // 1-微信，2-支付宝，3-现金，4-银行卡，5-线下，6-余额，7-优惠券抵扣
   openId?: string
 }) {
   return request.post({
@@ -202,7 +216,7 @@ export function fetchIssuePay(data: {
  * @param orderId 订单ID
  * @returns 支付状态
  */
-export function fetchPayStatus(orderId: number) {
+export function fetchPayStatus(orderId: Id) {
   return request.get({
     url: '/restaurant-order/queryPayStatus',
     params: { orderId }
@@ -215,7 +229,7 @@ export function fetchPayStatus(orderId: number) {
  * @param reason 超时原因
  * @returns 处理结果
  */
-export function fetchPayTimeout(orderId: number, reason?: string) {
+export function fetchPayTimeout(orderId: Id, reason?: string) {
   return request.post({
     url: '/restaurant-order/payTimeOut',
     data: null,
@@ -229,7 +243,7 @@ export function fetchPayTimeout(orderId: number, reason?: string) {
  * @param reason 失败原因
  * @returns 处理结果
  */
-export function fetchPayError(orderId: number, reason?: string) {
+export function fetchPayError(orderId: Id, reason?: string) {
   return request.post({
     url: '/restaurant-order/payError',
     data: null,
@@ -243,7 +257,7 @@ export function fetchPayError(orderId: number, reason?: string) {
  * @param status 订单状态
  * @returns 操作结果
  */
-export function fetchUpdateOrderStatus(orderId: number, status: number) {
+export function fetchUpdateOrderStatus(orderId: Id, status: number) {
   return request.put({
     url: '/restaurant-order/updateStatus',
     params: { orderId, status }
@@ -253,52 +267,16 @@ export function fetchUpdateOrderStatus(orderId: number, status: number) {
 // ============ 收银台专用接口 ============
 
 /**
- * 收银台-扫码支付下单（预留接口，暂未开放）
- * @param data 订单数据
- * @returns 支付参数
- */
-export function fetchCashierScanPay(data: {
-  storeId?: number
-  tableId?: number
-  sessionNo?: string
-  userId?: number
-  orderType?: number
-  peopleCount?: number
-  totalPrice: number
-  discountRate?: number | null // 整单折扣率
-  paymentType: number // 支付方式：1-微信，2-支付宝
-  cartItems: Array<{
-    cartItemId?: string
-    dishId: number
-    categoryId?: string
-    dishName: string
-    price: number
-    basePrice?: number
-    extraPrice?: number
-    categoryName?: string
-    specText?: string
-    quantity: number
-    isGift?: number // 是否赠送（0-否，1-是）
-  }>
-  note?: string
-  printReceipt?: boolean
-}) {
-  return request.post({
-    url: '/restaurant-order/cashier/scanPay',
-    data
-  })
-}
-
-/**
  * 收银台-直接下单（管理员操作）
  * @param data 订单数据
  * @returns 订单信息
  */
 export function fetchCashierDirectOrder(data: {
-  storeId?: number
-  tableId?: number
+  idempotencyKey: string
+  storeId?: Id
+  tableId?: Id
   sessionNo?: string
-  userId?: number
+  userId?: Id
   orderType?: number
   peopleCount?: number
   totalPrice: number
@@ -307,8 +285,8 @@ export function fetchCashierDirectOrder(data: {
   paymentType?: number
   cartItems: Array<{
     cartItemId?: string
-    dishId: number
-    categoryId?: string
+    dishId: Id
+    categoryId?: Id
     dishName: string
     price: number
     basePrice?: number
@@ -321,8 +299,48 @@ export function fetchCashierDirectOrder(data: {
   note?: string
   printReceipt?: boolean
 }) {
-  return request.post({
+  return request.post<Api.Order.OrderDetailVO>({
     url: '/restaurant-order/cashier/directOrder',
+    data
+  })
+}
+
+/**
+ * 收银台-扫码支付（被扫：收银员扫顾客付款码完成收款）
+ * 支持微信（paymentType=1）与支付宝（paymentType=2）。
+ * 后端近实时处理：用户支付中会轮询，超时自动撤单；成功返回已支付订单。
+ * 仅用于直接收银（无桌位会话）场景。
+ * @param data 下单 + 付款码 authCode
+ * @returns { order } 已支付订单
+ */
+export function fetchCashierScanPay(data: {
+  idempotencyKey: string
+  storeId?: Id
+  tableId?: Id
+  userId?: Id
+  orderType?: number
+  peopleCount?: number
+  totalPrice: number
+  paymentType: number // 1-微信，2-支付宝
+  authCode: string // 顾客付款码（扫码枪读取，一次性）
+  cartItems: Array<{
+    cartItemId?: string
+    dishId: Id
+    categoryId?: Id
+    dishName: string
+    price: number
+    basePrice?: number
+    extraPrice?: number
+    categoryName?: string
+    specText?: string
+    quantity: number
+    isGift?: number
+  }>
+  note?: string
+  printReceipt?: boolean
+}) {
+  return request.post<{ order: Api.Order.OrderDetailVO }>({
+    url: '/restaurant-order/cashier/scanPay',
     data
   })
 }
@@ -337,12 +355,12 @@ export function fetchCashierSettleSession(data: {
   sessionNo: string
   paymentType: number // 3-现金，4-银行卡，6-余额
   actualAmount?: number // 选填，不传则用订单应付金额；传了用于找零与记录
-  userId?: number // 余额支付时必填
+  userId?: Id // 余额支付时必填
   discountRate?: number | null // 选填，整单折扣率 0.8=8折 1=无折扣
   note?: string | null // 选填，订单备注
   printReceipt?: boolean
 }) {
-  return request.post({
+  return request.post<Api.Order.OrderDetailVO>({
     url: '/restaurant-order/cashier/settleSession',
     data
   })
@@ -354,7 +372,7 @@ export function fetchCashierSettleSession(data: {
  * @param cancelReason 取消原因
  * @returns 操作结果
  */
-export function fetchCancelOrder(orderId: number, cancelReason?: string) {
+export function fetchCancelOrder(orderId: Id, cancelReason?: string) {
   return request.post({
     url: '/restaurant-order/cancel',
     data: null,
@@ -367,8 +385,8 @@ export function fetchCancelOrder(orderId: number, cancelReason?: string) {
  * @param orderId 订单ID
  * @returns 订单详情
  */
-export function fetchOrderDetail(orderId: number) {
-  return request.get({
+export function fetchOrderDetail(orderId: Id) {
+  return request.get<Api.Order.OrderDetailVO>({
     url: '/restaurant-order/getOrderDetail',
     params: { orderId }
   })
@@ -381,12 +399,12 @@ export function fetchOrderDetail(orderId: number) {
  * @returns 更新后的订单信息
  */
 export function fetchMarkOrderItemsGift(data: {
-  orderId: number
+  orderId: Id
   sessionNo?: string
-  orderItemIds: number[]
+  orderItemIds: Id[]
   isGift: 0 | 1
 }) {
-  return request.post({
+  return request.post<Api.Order.OrderDetailVO>({
     url: '/restaurant-order/markOrderItemsGift',
     data
   })
@@ -398,15 +416,26 @@ export function fetchMarkOrderItemsGift(data: {
  * @returns 退菜结果
  */
 export function fetchRefundDish(data: {
-  orderId: number
-  refundItems: Array<{ orderItemId: number; refundQuantity: number; refundAmount?: number }>
+  orderId: Id
+  refundItems: Array<{ orderItemId: Id; refundQuantity: number; refundAmount?: number }>
   refundReason: string
-  operatorId?: number
+  idempotencyKey: string
 }) {
-  return request.post({
+  return request.post<RefundDishResult>({
     url: '/restaurant-order/refundDish',
     data
   })
+}
+
+export interface RefundDishResult {
+  orderId: Id
+  orderNo: string
+  totalRefundAmount: number
+  newOrderTotalPrice?: number | null
+  refundReason: string
+  refundTime: string
+  refundNo: string
+  refundStatus: '已申请' | '处理中' | '成功' | '失败'
 }
 
 // ============ 桌位会话 API ============
@@ -505,14 +534,14 @@ export function fetchNoShowTableReservation(id: Id) {
  * @returns 会话信息
  */
 export function fetchAdminOpenTable(data: {
-  tableId: number
+  tableId: Id
   reservationId?: Id
   peopleCount?: number
-  operatorId: number
+  operatorId: Id
   operatorName?: string
   remark?: string
 }) {
-  return request.post({
+  return request.post<SessionVO>({
     url: '/table-session/admin/open',
     data
   })
@@ -524,7 +553,7 @@ export function fetchAdminOpenTable(data: {
  * @returns 会话详情
  */
 export function fetchSessionDetail(sessionNo: string) {
-  return request.get({
+  return request.get<SessionVO>({
     url: `/table-session/detail/${sessionNo}`
   })
 }
@@ -533,7 +562,7 @@ export function fetchSessionDetail(sessionNo: string) {
 
 // 分类项
 export interface CategoryItem {
-  id: number
+  id: Id
   categoryName: string
   categoryDesc?: string
   icon?: string
@@ -543,15 +572,18 @@ export interface CategoryItem {
 
 // 菜品项
 export interface DishItem {
-  id: number
+  id: Id
   dishName: string
   dishDesc?: string
-  price: number
-  originalPrice?: number
+  salePrice: number
+  displayPrice: number
+  campaignPrice?: number
+  priceSource?: string
+  appliedCampaignName?: string
   dishImage?: string
   stock: number
   unit?: string
-  categoryId?: number
+  categoryId?: Id
   categoryName?: string
   saleStatus?: number
   specOptions?: SpecOption[]
@@ -560,7 +592,7 @@ export interface DishItem {
 
 // 规格选项
 export interface SpecOption {
-  id: number
+  id: Id
   specName: string
   specValue: string
   priceAdjust: number
@@ -569,6 +601,8 @@ export interface SpecOption {
 
 // 购物车商品项
 export interface CartItem extends DishItem {
+  /** 当前规格组合经服务端试价后的平均成交单价 */
+  price: number
   number: number
   selectedSpecs?: SelectedSpec[]
   specKey?: string
@@ -585,7 +619,7 @@ export interface SelectedSpec {
 
 // 用户/会员项
 export interface UserItem {
-  id: number
+  id: Id
   username?: string
   nickname?: string
   phone?: string
@@ -600,7 +634,7 @@ export interface UserItem {
 
 // 桌位项
 export interface TableItem {
-  id: number
+  id: Id
   tableNumber: string
   tableName?: string
   seats: number
@@ -621,9 +655,10 @@ export interface TableItem {
 
 // 会话VO
 export interface SessionVO {
-  id: number
+  id: Id
   sessionNo: string
-  tableId: number
+  sessionToken?: string
+  tableId: Id
   tableNumber?: string
   tableName?: string
   peopleCount: number
@@ -633,41 +668,19 @@ export interface SessionVO {
   /** 用餐持续时间（分钟） */
   durationMinutes?: number
   totalOrders: number
+  currentOrderId?: Id
   totalAmount: number
   paidAmount?: number
-  status: number
+  status: '进行中' | '已结束'
   statusDesc?: string
   storeId?: Id
   storeName?: string
   orders?: OrderVO[]
 }
 
-// 订单VO
-export interface OrderVO {
-  id: number
-  orderNo: string
-  sessionNo?: string
-  totalPrice: number
-  actualAmount?: number
-  paymentType?: number
-  orderStatus: number
-  orderStatusDesc?: string
-  createTime: string
-  items?: OrderItemVO[]
-}
-
-// 订单明细VO
-export interface OrderItemVO {
-  id: number
-  orderId: number
-  dishId: number
-  dishName: string
-  dishImage?: string
-  price: number
-  quantity: number
-  specText?: string
-  isGift?: number
-}
+// 会话订单与管理端订单详情共用同一份后端契约。
+export type OrderVO = Api.Order.OrderDetailVO
+export type OrderItemVO = Api.Order.OrderItem
 
 // 支付方式枚举
 export enum PaymentType {
@@ -676,15 +689,9 @@ export enum PaymentType {
   CASH = 3,
   BANK_CARD = 4,
   OFFLINE = 5,
-  BALANCE = 6
+  BALANCE = 6,
+  COUPON = 7
 }
 
-// 订单状态枚举
-export enum OrderStatus {
-  PENDING = 1, // 待支付
-  PAID = 2, // 已支付
-  ACCEPTED = 3, // 已接单
-  PREPARING = 4, // 制作中
-  COMPLETED = 5, // 已完成
-  CANCELLED = 6 // 已取消
-}
+// 保留从收银 API 导入的兼容入口，实际定义统一维护在订单常量中。
+export { OrderStatusCode as OrderStatus } from '@/utils/constants/order'
