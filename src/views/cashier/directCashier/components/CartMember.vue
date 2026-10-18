@@ -36,14 +36,10 @@
       <ElButton v-if="member" text @click="editing = false">取消</ElButton>
     </div>
 
-    <div class="member-benefit">
+    <div v-if="!tableInfo" class="member-benefit">
       <ElIcon><TrophyBase /></ElIcon>
       <span>{{
-        member
-          ? '会员权益已生效，本单可享会员优惠'
-          : memberLocked
-            ? '首笔订单未绑定会员'
-            : '输入手机号加载会员，可使用积分与余额'
+        member ? '会员权益已生效，本单可享会员优惠' : '输入手机号加载会员，可使用积分与余额'
       }}</span>
     </div>
   </div>

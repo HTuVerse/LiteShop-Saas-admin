@@ -1,8 +1,5 @@
 <template>
   <div class="table-cashier-panel">
-    <div v-if="onlinePending" class="order-activity">
-      该桌线上订单待顾客支付，支付完成后将自动结束会话
-    </div>
     <!-- 收银主体区域 -->
     <div class="cashier-main">
       <!-- 左侧区域 -->
@@ -902,17 +899,6 @@
     flex-direction: column;
     height: 100%;
     background: linear-gradient(135deg, var(--el-bg-color-page), var(--el-color-primary-light-9));
-  }
-
-  .order-activity {
-    display: flex;
-    gap: 12px;
-    padding: 6px 16px;
-    overflow-x: auto;
-    font-size: 12px;
-    color: var(--el-text-color-secondary);
-    white-space: nowrap;
-    background: var(--el-fill-color-light);
   }
 
   // 收银主体区域
