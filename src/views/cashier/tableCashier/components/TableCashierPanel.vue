@@ -341,6 +341,7 @@
   }
 
   const updateCart = async (commodity: any) => {
+    if (onlinePending.value) return ElMessage.warning('该桌线上订单待顾客支付，不能继续加购')
     const sessionNo = props.session?.sessionNo
     const token = activeSessionToken.value
     if (!sessionNo || !token) return ElMessage.error('桌位会话尚未就绪，请重试')
@@ -399,6 +400,7 @@
 
   // 清空购物车
   const emptyCart = async (isClearing = false) => {
+    if (onlinePending.value) return
     if (!isClearing && props.session?.sessionNo && activeSessionToken.value) {
       try {
         await fetchClearSharedCart(props.session.sessionNo, activeSessionToken.value)
@@ -550,6 +552,7 @@
 
   // 挂单到购物车
   const pendingToCart = (item: any) => {
+    if (onlinePending.value) return ElMessage.warning('该桌线上订单待顾客支付，不能恢复挂单')
     cart.uuid = item.uuid
     cart.commodity = JSON.parse(JSON.stringify(item.commodity))
     cart.sum = item.sum
