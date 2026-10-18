@@ -14,14 +14,14 @@
             :class="{ active: folderFilter === undefined }"
             @click="selectFolder()"
           >
-            <ArtSvgIcon icon="ri:folder-2-fill" /><span>全部资源</span>
+            <img class="folder-asset" :src="folderBlueIcon" alt="" /><span>全部资源</span>
           </button>
           <button
             class="folder-item"
             :class="{ active: folderFilter === '0' }"
             @click="selectFolder('0')"
           >
-            <ArtSvgIcon icon="ri:inbox-2-line" /><span>未分类</span>
+            <img class="folder-asset" :src="folderGoldIcon" alt="" /><span>未分类</span>
           </button>
           <div class="folder-divider" />
           <div
@@ -35,7 +35,7 @@
               :class="{ active: folderFilter === folder.id }"
               @click="selectFolder(folder.id)"
             >
-              <ArtSvgIcon icon="ri:folder-2-fill" /><span class="folder-name">{{
+              <img class="folder-asset" :src="folderGoldIcon" alt="" /><span class="folder-name">{{
                 folder.name
               }}</span>
             </button>
@@ -61,7 +61,7 @@
       <main class="workspace-panel" @dragover.prevent @drop.prevent="onDrop">
         <div class="workspace-toolbar">
           <div class="workspace-context">
-            <span class="context-icon"><ArtSvgIcon icon="ri:folder-2-fill" /></span>
+            <span class="context-icon"><img :src="currentFolderIcon" alt="" /></span>
             <span class="context-name">{{ currentFolderName }}</span>
             <span class="context-count">{{ pagination.total }} 项</span>
           </div>
@@ -182,7 +182,9 @@
                     class="thumbnail"
                     @click.stop="preview(row)"
                   />
-                  <div v-else class="file-icon">{{ extension(row.originalFileName) }}</div>
+                  <div v-else class="file-icon">
+                    <img :src="fileIcon(row)" alt="" />
+                  </div>
                   <button class="name-button" @click.stop="selectFile(row)">{{
                     row.originalFileName
                   }}</button>
@@ -224,9 +226,7 @@
                   :src="activeFile.url"
                   fit="cover"
                 />
-                <span v-else class="detail-file-icon">{{
-                  extension(activeFile.originalFileName)
-                }}</span>
+                <img v-else class="detail-file-icon" :src="fileIcon(activeFile)" alt="" />
               </div>
               <div class="detail-title-row">
                 <strong :title="activeFile.originalFileName">{{
@@ -280,7 +280,7 @@
               </div>
             </template>
             <div v-else class="detail-empty">
-              <ArtSvgIcon icon="ri:file-search-line" />
+              <img :src="emptyFilesIcon" alt="" />
               <strong>选择一个文件</strong>
               <p>点击列表中的文件，查看文件信息与快捷操作。</p>
             </div>
@@ -374,6 +374,14 @@
   import { Search } from '@element-plus/icons-vue'
   import { useTable } from '@/hooks/core/useTable'
   import PlatformServicesConfig from '@/views/config/website/modules/platform-services-config.vue'
+  import folderBlueIcon from '@/assets/images/resource-library/folder-blue.png'
+  import folderGoldIcon from '@/assets/images/resource-library/folder-gold.png'
+  import fileImageIcon from '@/assets/images/resource-library/file-image.png'
+  import fileVideoIcon from '@/assets/images/resource-library/file-video.png'
+  import fileDocumentIcon from '@/assets/images/resource-library/file-document.png'
+  import fileAudioIcon from '@/assets/images/resource-library/file-audio.png'
+  import fileArchiveIcon from '@/assets/images/resource-library/file-archive.png'
+  import emptyFilesIcon from '@/assets/images/resource-library/empty-files.png'
   import {
     listResources,
     listResourceFolders,
@@ -541,6 +549,9 @@
   })
 
   const activeFile = computed(() => rows.value.find((item) => item.id === activeFileId.value))
+  const currentFolderIcon = computed(() =>
+    folderFilter.value === undefined ? folderBlueIcon : folderGoldIcon
+  )
   const currentFolderName = computed(() =>
     folderFilter.value === undefined
       ? '全部资源'
@@ -563,6 +574,17 @@
     if (file.contentType?.startsWith('audio/')) return '音频'
     if (file.contentType === 'application/pdf') return 'PDF'
     return extension(file.originalFileName)
+  }
+  function fileIcon(file: ResourceFile) {
+    const ext = extension(file.originalFileName)
+    if (isImage(file) || ['PNG', 'JPG', 'JPEG', 'GIF', 'WEBP', 'SVG'].includes(ext))
+      return fileImageIcon
+    if (file.contentType?.startsWith('video/') || ['MP4', 'MOV', 'AVI', 'WEBM'].includes(ext))
+      return fileVideoIcon
+    if (file.contentType?.startsWith('audio/') || ['MP3', 'WAV', 'AAC', 'FLAC'].includes(ext))
+      return fileAudioIcon
+    if (['ZIP', 'RAR', '7Z', 'TAR', 'GZ'].includes(ext)) return fileArchiveIcon
+    return fileDocumentIcon
   }
   const isImage = (file: ResourceFile) => file.contentType?.startsWith('image/') === true
   const extension = (name: string) => name.split('.').pop()?.slice(0, 4).toUpperCase() || 'FILE'
@@ -886,6 +908,12 @@
     color: var(--el-color-primary);
   }
 
+  .folder-asset {
+    width: 23px;
+    height: 23px;
+    object-fit: contain;
+  }
+
   .folder-item:hover,
   .folder-item.active {
     font-weight: 600;
@@ -937,6 +965,12 @@
     color: var(--el-color-primary);
     background: var(--el-color-primary-light-9);
     border-radius: 8px;
+  }
+
+  .context-icon img {
+    width: 30px;
+    height: 30px;
+    object-fit: contain;
   }
 
   .context-name {
@@ -1087,10 +1121,13 @@
   .file-icon {
     display: grid;
     place-items: center;
-    font-size: 10px;
-    font-weight: 700;
-    color: var(--el-color-primary);
-    background: var(--el-color-primary-light-9);
+    overflow: hidden;
+  }
+
+  .file-icon img {
+    width: 36px;
+    height: 36px;
+    object-fit: contain;
   }
 
   .name-button {
@@ -1130,9 +1167,9 @@
   }
 
   .detail-file-icon {
-    font-size: 24px;
-    font-weight: 700;
-    color: var(--el-color-primary);
+    width: 132px;
+    height: 132px;
+    object-fit: contain;
   }
 
   .detail-title-row {
@@ -1207,8 +1244,9 @@
   }
 
   .detail-empty > :first-child {
-    font-size: 42px;
-    color: var(--el-color-primary-light-5);
+    width: 150px;
+    height: 150px;
+    object-fit: contain;
   }
 
   .detail-empty strong {
