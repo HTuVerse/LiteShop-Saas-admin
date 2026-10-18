@@ -102,116 +102,130 @@
           </ElAlert>
         </div>
 
-        <ArtForm class="search-form" inline @submit.prevent="search">
-          <ElFormItem class="keyword-field"
-            ><ElInput
-              v-model="filters.keyword"
-              clearable
-              placeholder="搜索文件名"
-              :prefix-icon="Search"
-          /></ElFormItem>
-          <ElFormItem class="filter-field">
-            <ElSelect v-model="filters.type" clearable placeholder="全部类型">
-              <ElOption label="图片" value="image" />
-              <ElOption label="其他文件" value="file" />
-            </ElSelect>
-          </ElFormItem>
-          <ElFormItem class="filter-field">
-            <ElSelect v-model="filters.visibility" clearable placeholder="全部权限">
-              <ElOption label="公开" value="PUBLIC" />
-              <ElOption label="私有" value="PRIVATE" />
-            </ElSelect>
-          </ElFormItem>
-          <ElFormItem class="id-field">
-            <ElInput v-model="filters.tenantId" clearable placeholder="商户 ID" />
-          </ElFormItem>
-          <ElFormItem class="id-field">
-            <ElInput v-model="filters.uploaderId" clearable placeholder="上传者 ID" />
-          </ElFormItem>
-          <ElButton type="primary" native-type="submit">搜索</ElButton>
-          <ElButton @click="resetFilters">重置</ElButton>
-        </ArtForm>
-
         <div class="content-layout">
-          <section class="files-panel" aria-label="资源文件列表">
-            <div class="batch-toolbar">
-              <div class="batch-actions">
-                <span class="selected-count">已选择 {{ selected.length }} 项</span>
-                <ElButton
-                  :disabled="!selected.length"
-                  @click="openMove(selected.map((item) => item.id))"
-                  >批量移动</ElButton
+          <div class="file-area">
+            <ArtForm class="search-form" inline @submit.prevent="search">
+              <ElFormItem class="keyword-field"
+                ><ElInput
+                  v-model="filters.keyword"
+                  clearable
+                  placeholder="搜索文件名"
+                  :prefix-icon="Search"
+              /></ElFormItem>
+              <ElFormItem class="filter-field">
+                <ElSelect v-model="filters.type" clearable placeholder="全部类型">
+                  <ElOption label="图片" value="image" />
+                  <ElOption label="其他文件" value="file" />
+                </ElSelect>
+              </ElFormItem>
+              <ElFormItem class="filter-field">
+                <ElSelect v-model="filters.visibility" clearable placeholder="全部权限">
+                  <ElOption label="公开" value="PUBLIC" />
+                  <ElOption label="私有" value="PRIVATE" />
+                </ElSelect>
+              </ElFormItem>
+              <ElFormItem v-show="filtersExpanded" class="id-field">
+                <ElInput v-model="filters.tenantId" clearable placeholder="商户 ID" />
+              </ElFormItem>
+              <ElFormItem v-show="filtersExpanded" class="id-field">
+                <ElInput v-model="filters.uploaderId" clearable placeholder="上传者 ID" />
+              </ElFormItem>
+              <ElButton class="expand-button" @click="filtersExpanded = !filtersExpanded">
+                {{ filtersExpanded ? '收起' : '展开' }}筛选
+                <span v-if="!filtersExpanded && hiddenFilterCount"
+                  >（{{ hiddenFilterCount }}）</span
                 >
-                <ElButton
-                  :disabled="!selected.length"
-                  type="danger"
-                  plain
-                  @click="remove(selected.map((item) => item.id))"
-                  >批量删除</ElButton
-                >
-              </div>
-              <ArtTableHeader
-                class="resource-table-header"
-                v-model:columns="columnChecks"
-                :loading="loading"
-                @refresh="refreshData"
-              />
-            </div>
+                <ArtSvgIcon
+                  :icon="filtersExpanded ? 'ri:arrow-up-s-line' : 'ri:arrow-down-s-line'"
+                />
+              </ElButton>
+              <ElButton type="primary" native-type="submit">搜索</ElButton>
+              <ElButton @click="resetFilters">重置</ElButton>
+            </ArtForm>
 
-            <ArtTable
-              row-key="id"
-              :data="rows"
-              :columns="columns"
-              :loading="loading"
-              :pagination="pagination"
-              @selection-change="(items: ResourceFile[]) => (selected = items)"
-              @row-click="selectFile"
-              @pagination:size-change="handleSizeChange"
-              @pagination:current-change="handleCurrentChange"
-            >
-              <template #resourceName="{ row }">
-                <div class="file-name-cell">
-                  <ElImage
-                    v-if="isImage(row) && row.url && row.visibility !== 'PRIVATE'"
-                    :src="row.url"
-                    fit="cover"
-                    class="thumbnail"
-                    @click.stop="preview(row)"
-                  />
-                  <div v-else class="file-icon">
-                    <img :src="fileIcon(row)" alt="" />
-                  </div>
-                  <button class="name-button" @click.stop="selectFile(row)">{{
-                    row.originalFileName
-                  }}</button>
+            <section class="files-panel" aria-label="资源文件列表">
+              <div class="batch-toolbar">
+                <div class="batch-actions">
+                  <span class="selected-count">已选择 {{ selected.length }} 项</span>
+                  <ElButton
+                    :disabled="!selected.length"
+                    @click="openMove(selected.map((item) => item.id))"
+                    >批量移动</ElButton
+                  >
+                  <ElButton
+                    :disabled="!selected.length"
+                    type="danger"
+                    plain
+                    @click="remove(selected.map((item) => item.id))"
+                    >批量删除</ElButton
+                  >
                 </div>
-              </template>
-              <template #resourceActions="{ row }">
-                <ElDropdown
-                  trigger="hover"
-                  @command="(command: string) => fileCommand(command, row)"
-                >
-                  <ElButton text aria-label="文件操作" @click.stop>
-                    <ArtSvgIcon icon="ri:more-2-fill" />
-                  </ElButton>
-                  <template #dropdown>
-                    <ElDropdownMenu>
-                      <ElDropdownItem command="preview">预览</ElDropdownItem>
-                      <ElDropdownItem command="download">下载</ElDropdownItem>
-                      <ElDropdownItem command="usage">查看引用</ElDropdownItem>
-                      <ElDropdownItem v-if="row.visibility !== 'PRIVATE'" command="copy"
-                        >复制链接</ElDropdownItem
-                      >
-                      <ElDropdownItem command="rename">重命名</ElDropdownItem>
-                      <ElDropdownItem command="move">移动到文件夹</ElDropdownItem>
-                      <ElDropdownItem command="visibility">切换公开/私有</ElDropdownItem>
-                      <ElDropdownItem divided command="delete">删除</ElDropdownItem>
-                    </ElDropdownMenu>
-                  </template>
-                </ElDropdown>
-              </template>
-            </ArtTable>
-          </section>
+                <ArtTableHeader
+                  class="resource-table-header"
+                  v-model:columns="columnChecks"
+                  :loading="loading"
+                  @refresh="refreshData"
+                />
+              </div>
+
+              <ArtTable
+                row-key="id"
+                :data="rows"
+                :columns="columns"
+                :loading="loading"
+                :pagination="pagination"
+                @selection-change="(items: ResourceFile[]) => (selected = items)"
+                @row-click="selectFile"
+                @pagination:size-change="handleSizeChange"
+                @pagination:current-change="handleCurrentChange"
+              >
+                <template #resourceName="{ row }">
+                  <div class="file-name-cell">
+                    <ElImage
+                      v-if="isImage(row) && row.url && row.visibility !== 'PRIVATE'"
+                      :src="row.url"
+                      fit="cover"
+                      class="thumbnail"
+                      @click.stop="preview(row)"
+                    />
+                    <div v-else class="file-icon">
+                      <img :src="fileIcon(row)" alt="" />
+                    </div>
+                    <button class="name-button" @click.stop="selectFile(row)">{{
+                      row.originalFileName
+                    }}</button>
+                  </div>
+                </template>
+                <template #resourceActions="{ row }">
+                  <ElDropdown
+                    trigger="hover"
+                    @command="(command: string) => fileCommand(command, row)"
+                  >
+                    <ElButton text aria-label="文件操作" @click.stop>
+                      <ArtSvgIcon icon="ri:more-2-fill" />
+                    </ElButton>
+                    <template #dropdown>
+                      <ElDropdownMenu>
+                        <ElDropdownItem command="preview">预览</ElDropdownItem>
+                        <ElDropdownItem command="download">下载</ElDropdownItem>
+                        <ElDropdownItem command="usage">查看引用</ElDropdownItem>
+                        <ElDropdownItem v-if="row.visibility !== 'PRIVATE'" command="copy"
+                          >复制链接</ElDropdownItem
+                        >
+                        <ElDropdownItem command="rename">重命名</ElDropdownItem>
+                        <ElDropdownItem command="move">移动到文件夹</ElDropdownItem>
+                        <ElDropdownItem command="visibility">切换公开/私有</ElDropdownItem>
+                        <ElDropdownItem divided command="delete">删除</ElDropdownItem>
+                      </ElDropdownMenu>
+                    </template>
+                  </ElDropdown>
+                </template>
+              </ArtTable>
+            </section>
+            <p class="drop-hint"
+              >可将文件拖入列表区域上传，访问权限由顶部“公开上传 / 私有上传”决定。</p
+            >
+          </div>
 
           <aside class="detail-panel" aria-label="文件详情">
             <template v-if="activeFile">
@@ -247,7 +261,6 @@
             </div>
           </aside>
         </div>
-        <p class="drop-hint">可将文件拖入列表区域上传，访问权限由顶部“公开上传 / 私有上传”决定。</p>
       </main>
     </div>
 
@@ -365,6 +378,7 @@
 
   const folders = ref<ResourceFolder[]>([])
   const folderFilter = ref<string>()
+  const filtersExpanded = ref(false)
   const filters = reactive({
     keyword: '',
     type: '' as '' | 'image' | 'file',
@@ -372,6 +386,9 @@
     tenantId: '',
     uploaderId: ''
   })
+  const hiddenFilterCount = computed(
+    () => Number(Boolean(filters.tenantId.trim())) + Number(Boolean(filters.uploaderId.trim()))
+  )
   const selected = ref<ResourceFile[]>([])
   const activeFileId = ref<string>()
   const fileInput = ref<HTMLInputElement>()
@@ -1014,14 +1031,16 @@
   }
 
   .search-form {
+    padding: 14px 16px;
+    margin: 0;
+    border-bottom: 1px solid var(--el-border-color-lighter);
+  }
+
+  .search-form :deep(.el-form) {
     display: flex;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     gap: 8px;
     align-items: center;
-    padding: 14px 20px;
-    margin: 0;
-    overflow-x: auto;
-    border-bottom: 1px solid var(--el-border-color-lighter);
   }
 
   .search-form :deep(.el-form-item) {
@@ -1034,12 +1053,12 @@
   }
 
   .keyword-field {
-    flex: 1 0 140px;
-    min-width: 140px;
+    flex: 1 1 175px;
+    min-width: 150px;
   }
 
   .filter-field {
-    flex: 0 0 105px;
+    flex: 0 0 112px;
   }
 
   .filter-field :deep(.el-select) {
@@ -1047,13 +1066,21 @@
   }
 
   .id-field {
-    flex: 0 0 95px;
+    flex: 0 0 120px;
+  }
+
+  .expand-button :deep(.art-svg-icon) {
+    margin-left: 4px;
   }
 
   .content-layout {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 260px;
     min-height: 550px;
+  }
+
+  .file-area {
+    min-width: 0;
   }
 
   .files-panel {
@@ -1143,13 +1170,20 @@
   }
 
   .detail-panel {
+    display: flex;
+    flex-direction: column;
+    align-self: stretch;
     min-width: 0;
+    min-height: 0;
+    max-height: calc(100vh - 180px);
     padding: 16px;
+    overflow: hidden;
     border-left: 1px solid var(--el-border-color-lighter);
   }
 
   .detail-preview {
     display: grid;
+    flex: none;
     place-items: center;
     height: 160px;
     overflow: hidden;
@@ -1170,8 +1204,12 @@
   }
 
   .detail-section {
+    flex: 1;
+    min-height: 0;
     padding-top: 16px;
+    padding-right: 4px;
     margin-top: 18px;
+    overflow-y: auto;
     border-top: 1px solid var(--el-border-color-lighter);
   }
 
