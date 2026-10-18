@@ -255,8 +255,8 @@
         item.className === 'all'
           ? allTables.value.length
           : item.className === 'reserved'
-          ? allTables.value.filter((table) => table.nextReservation).length
-          : allTables.value.filter((table) => table.status === item.status).length
+            ? allTables.value.filter((table) => table.nextReservation).length
+            : allTables.value.filter((table) => table.status === item.status).length
     }))
   })
 
@@ -321,7 +321,7 @@
       // 根据 status 与 sessionNo 严格判断桌位状态（有 sessionNo 视为使用中）
       allTables.value = tables.map((table) => ({
         ...table,
-        status: table.sessionNo ? '使用中' : table.status ?? '空闲'
+        status: table.sessionNo ? '使用中' : (table.status ?? '空闲')
       }))
       if (!regionOptions.value.some((region) => region.value === selectedRegion.value)) {
         selectedRegion.value = '__all__'
@@ -457,7 +457,8 @@
         currentSession.value = detail ?? null
       } catch {
         if (storeId !== selectedStoreId.value) return
-        currentSession.value = null
+        ElMessage.error('加载桌位会话失败，请重试')
+        return
       }
       selectedTable.value = table
       return
@@ -531,7 +532,8 @@
     display: flex;
     min-height: 112px;
     overflow: hidden;
-    background: radial-gradient(circle at 8% 0%, rgb(45 128 255 / 10%), transparent 32%),
+    background:
+      radial-gradient(circle at 8% 0%, rgb(45 128 255 / 10%), transparent 32%),
       linear-gradient(105deg, #f8fbff 0%, #f3f9ff 66%, #fff 100%);
   }
 

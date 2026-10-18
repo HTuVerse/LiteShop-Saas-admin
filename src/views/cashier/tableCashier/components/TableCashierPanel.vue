@@ -1,5 +1,8 @@
 <template>
   <div class="table-cashier-panel">
+    <div v-if="orderActivities.length" class="order-activity">
+      <span v-for="activity in orderActivities" :key="activity.key">{{ activity.text }}</span>
+    </div>
     <!-- 收银主体区域 -->
     <div class="cashier-main">
       <!-- 左侧区域 -->
@@ -42,8 +45,9 @@
 
 <script setup lang="ts">
   import { useUserStore } from '@/store/modules/user'
-  const scopeKey = useUserStore().scopeKey
-  import { ref, provide, reactive, onMounted } from 'vue'
+  const userStore = useUserStore()
+  const scopeKey = userStore.scopeKey
+  import { computed, onBeforeUnmount, provide, reactive, ref, watch } from 'vue'
   import { ElMessage, ElMessageBox } from 'element-plus'
   import { onBeforeRouteLeave } from 'vue-router'
   import Cart from '@views/cashier/directCashier/components/Cart.vue'
@@ -54,10 +58,19 @@
   import { fetchGetOrderBySession } from '@/api/dish-manage'
   import {
     fetchCreateOrder,
+    fetchCashierProxyOrder,
     fetchAddItemsToOrder,
-    fetchMarkOrderItemsGift
+    fetchMarkOrderItemsGift,
+    fetchSharedCart,
+    fetchAddSharedCartItem,
+    fetchUpdateSharedCartItem,
+    fetchRemoveSharedCartItem,
+    fetchClearSharedCart,
+    fetchSessionDetail
   } from '@/api/cashier'
-  import { generateUUID, formatTime } from '@utils/cashier/utils'
+  import { fetchPricingQuote } from '@/api/pricing'
+  import { formatTime, generateUUID, normalizeOrderItemForCart } from '@utils/cashier/utils'
+  import { connectTableSessionSocket } from '../useTableSessionSocket'
 
   // 定义 props
   const props = defineProps<{
@@ -80,14 +93,19 @@
   // 提交订单/加菜 loading
   const submitOrderLoading = ref(false)
 
+  // 请求失败重试时复用同一个键，服务端会返回第一次成功创建的订单。
+  const createOrderIdempotencyKey = ref(generateUUID())
+
   // 当前会话订单ID（用于退菜等）
-  const currentOrderId = ref<number | null>(null)
+  const currentOrderId = ref<string | number | null>(null)
+  const orderActivities = ref<Array<{ key: string; text: string }>>([])
 
   // 退菜弹窗显示
   const refundDishVisible = ref(false)
 
   // 会员信息
   const member = ref<any>(null)
+  const activeSessionToken = ref('')
 
   // 商品组件引用
   const commodityRef = ref()
@@ -144,74 +162,70 @@
     return `${month}-${day} ${hours}:${minutes}`
   }
 
-  // 将订单明细项转为购物车商品格式（fromOrder: true 表示来自后端订单；orderItemId 用于赠菜接口；batchNo 为下单批次号）
-  // 保留 totalPrice（实付小计）、discountPrice（优惠金额），与订单一致，避免收银金额错误
-  const orderItemToCart = (item: any) => {
-    const quantity = item.quantity ?? item.number ?? 1
-    const totalPrice = item.totalPrice != null ? Number(item.totalPrice) : null
-    const discountPrice = item.discountPrice != null ? Number(item.discountPrice) : null
-    return {
-      id: item.dishId,
-      orderItemId: item.id != null ? item.id : undefined,
-      batchNo: item.batchNo != null ? Number(item.batchNo) : undefined,
-      dishName: item.dishName,
-      price: Number(item.price),
-      number: quantity,
-      totalPrice: totalPrice,
-      discountPrice: discountPrice ?? 0,
-      dishImage: item.dishImage || item.mainPic || '',
-      stock: 999,
-      saleStatus: 1,
-      categoryId: item.categoryId,
-      categoryName: item.categoryName || '',
-      specText: item.specText ?? item.specOptionsText ?? '',
-      specKey:
-        item.specText ?? item.specOptionsText
-          ? `spec_${item.dishId}_${item.specText || item.specOptionsText}`
-          : '',
-      isGift: Number(item.isGift) === 1 ? 1 : 0,
-      fromOrder: true
-    }
-  }
-
   // 加载桌位订单数据：统一走 fetchGetOrderBySession
-  const loadTableOrder = async () => {
+  let orderRequestId = 0
+  const loadTableOrder = async (silent = false) => {
     if (!props.session?.sessionNo) {
       return
     }
 
+    const requestId = ++orderRequestId
     refreshing.value = true
     try {
-      const res = await fetchGetOrderBySession(props.session.sessionNo)
+      const res = (await fetchGetOrderBySession(props.session.sessionNo)) as
+        | (Api.Order.OrderDetailVO & {
+            operatorName?: string
+            dishChanges?: Array<{
+              id: string | number
+              changeType: number
+              dishName?: string
+              quantity: number
+              operatorName?: string
+            }>
+          })
+        | null
+      if (requestId !== orderRequestId) return
       if (res && res.id) {
         sessionHasOrder.value = true
         currentOrderId.value = res.id
+        member.value = res.userId ? { id: res.userId, nickname: res.username || '会员' } : null
+        cart.member = member.value
         const list = res.items || []
+        const unsubmitted = cart.commodity.filter((item: any) => item.fromOrder !== true)
+        cart.commodity = [...list.map(normalizeOrderItemForCart), ...unsubmitted]
+        orderActivities.value = [
+          ...(res.operatorName ? [{ key: 'created', text: `${res.operatorName} 提交订单` }] : []),
+          ...((res.dishChanges || []) as any[]).map((change) => ({
+            key: String(change.id),
+            text: `${change.operatorName || '顾客'}${change.changeType === 2 ? '退菜' : '加菜'} ${change.dishName || '菜品'} ×${change.quantity}`
+          }))
+        ].slice(0, 5)
         if (list.length > 0) {
-          cart.commodity = list.map((item: any) => orderItemToCart(item))
-          if (res.userId) {
-            member.value = { id: res.userId, nickname: res.username || '会员' }
-            cart.member = member.value
-          }
           cart.discountRate = res.discountRate ?? null
           cart.note = res.note || ''
           cart.uuid = generateUUID()
           cart.sessionNo = props.session.sessionNo
-          ElMessage.success('订单数据加载成功')
+          if (!silent) ElMessage.success('订单数据加载成功')
         }
       } else {
         sessionHasOrder.value = false
         currentOrderId.value = null
+        orderActivities.value = []
       }
     } catch (error: any) {
+      if (requestId !== orderRequestId) return
       console.error('加载订单数据失败:', error)
-      sessionHasOrder.value = false
-      currentOrderId.value = null
-      if (error?.response?.status !== 404) {
-        ElMessage.warning('该桌位暂无订单数据')
+      const noOrder =
+        error?.response?.status === 404 || String(error?.message || '').includes('暂无订单')
+      if (noOrder) {
+        sessionHasOrder.value = false
+        currentOrderId.value = null
+        orderActivities.value = []
+      } else if (!silent) {
+        ElMessage.warning('加载桌位订单失败，请稍后重试')
       }
     } finally {
-      refreshing.value = false
+      if (requestId === orderRequestId) refreshing.value = false
     }
   }
 
@@ -223,7 +237,7 @@
   // 返回
   const handleBack = () => {
     if (cart.commodity.length > 0) {
-      ElMessageBox.confirm('当前购物车有未结算商品，确定要返回吗？', '提示', {
+      ElMessageBox.confirm('当前桌位有未提交菜品，返回后仍保留在该桌会话，确定返回吗？', '提示', {
         confirmButtonText: '确定',
         cancelButtonText: '取消',
         type: 'warning'
@@ -281,68 +295,110 @@
     cart.member = value
   }
 
-  // 更新购物车
-  const updateCart = (commodity: any) => {
-    if (!cart.uuid) {
-      cart.uuid = generateUUID()
+  // 未提交菜品使用桌台共享购物车，其他顾客和收银端可立即看到变更。
+  let sharedCartRequestId = 0
+  const refreshSharedCart = async () => {
+    const sessionNo = props.session?.sessionNo
+    const token = activeSessionToken.value
+    if (!sessionNo || !token) return
+    const requestId = ++sharedCartRequestId
+    try {
+      const lines = await fetchSharedCart(sessionNo, token)
+      if (requestId !== sharedCartRequestId || props.session?.sessionNo !== sessionNo) return
+      const submitted = cart.commodity.filter((item: any) => item.fromOrder === true)
+      const existing = new Map(cart.commodity.map((item: any) => [item.cartItemId, item]))
+      cart.commodity = [
+        ...submitted,
+        ...lines.map((line) => ({
+          id: line.dishId,
+          cartItemId: line.cartItemId,
+          dishName: line.dishName,
+          dishImage: line.dishPics || '',
+          categoryId: line.categoryId,
+          categoryName: line.categoryName,
+          price: Number(line.price),
+          salePrice: Number(line.basePrice),
+          number: Number(line.quantity),
+          specText: line.specText || '',
+          specKey: line.specText || '',
+          isGift: (existing.get(line.cartItemId) as any)?.isGift || 0,
+          addedByName: line.addedByName,
+          fromOrder: false
+        }))
+      ]
+      calculateCart()
+    } catch (error: any) {
+      ElMessage.error(error?.message || '同步桌位购物车失败')
     }
-
-    // 更新会话编号
-    cart.sessionNo = props.session?.sessionNo || ''
-
-    // 检查是否有规格
-    if (commodity.specKey) {
-      const existIndex = cart.commodity.findIndex(
-        (item: any) =>
-          item.fromOrder !== true &&
-          item.id === commodity.id &&
-          item.specKey === commodity.specKey
-      )
-
-      if (existIndex !== -1) {
-        cart.commodity[existIndex].number += commodity.number || 1
-      } else {
-        cart.commodity.unshift({
-          ...commodity,
-          number: commodity.number || 1,
-          fromOrder: false // 加菜/首次点菜，可直接删
-        })
-      }
-    } else {
-      const existIndex = cart.commodity.findIndex(
-        (item: any) => item.fromOrder !== true && item.id === commodity.id && !item.specKey
-      )
-
-      if (existIndex !== -1) {
-        cart.commodity[existIndex].number += commodity.number || 1
-      } else {
-        cart.commodity.unshift({
-          ...commodity,
-          number: commodity.number || 1,
-          fromOrder: false // 加菜/首次点菜，可直接删
-        })
-      }
-    }
-
-    cart.member = member.value
-    ElMessage.success('加购成功')
   }
 
-  // 删除购物车商品
-  const deleteCart = (index: number) => {
-    cart.commodity.splice(index, 1)
-    ElMessage.success('删除成功')
+  const updateCart = async (commodity: any) => {
+    const sessionNo = props.session?.sessionNo
+    const token = activeSessionToken.value
+    if (!sessionNo || !token) return ElMessage.error('桌位会话尚未就绪，请重试')
+    try {
+      await fetchAddSharedCartItem(
+        {
+          sessionNo,
+          dishId: commodity.id,
+          quantity: commodity.number || 1,
+          specText: commodity.specText || '',
+          extraPrice: Array.isArray(commodity.selectedSpecs)
+            ? commodity.selectedSpecs.reduce(
+                (sum: number, spec: any) => sum + Number(spec.priceAdjust || 0),
+                0
+              )
+            : 0,
+          userId: userStore.info.userId,
+          userName: userStore.info.username || userStore.info.nickname || '收银员'
+        },
+        token
+      )
+      await refreshSharedCart()
+      ElMessage.success('加购成功')
+    } catch (error: any) {
+      ElMessage.error(error?.message || '加购失败')
+    }
   }
 
-  // 修改商品数量
-  const updateCartItemNumber = (index: number, number: number) => {
-    if (cart.commodity[index] && cart.commodity[index].fromOrder !== true) {
-      cart.commodity[index].number = number
+  const deleteCart = async (index: number) => {
+    const item = cart.commodity[index]
+    const sessionNo = props.session?.sessionNo
+    const token = activeSessionToken.value
+    if (!item?.cartItemId || !sessionNo || !token) return
+    try {
+      await fetchRemoveSharedCartItem(sessionNo, item.cartItemId, token)
+      await refreshSharedCart()
+      ElMessage.success('删除成功')
+    } catch (error: any) {
+      ElMessage.error(error?.message || '删除失败')
+    }
+  }
+
+  const updateCartItemNumber = async (index: number, number: number) => {
+    const item = cart.commodity[index]
+    const sessionNo = props.session?.sessionNo
+    const token = activeSessionToken.value
+    if (!item?.cartItemId || !sessionNo || !token || item.fromOrder === true) return
+    try {
+      await fetchUpdateSharedCartItem(sessionNo, item.cartItemId, number, token)
+    } catch (error: any) {
+      ElMessage.error(error?.message || '修改数量失败')
+    } finally {
+      await refreshSharedCart()
     }
   }
 
   // 清空购物车
-  const emptyCart = (isClearing = false) => {
+  const emptyCart = async (isClearing = false) => {
+    if (!isClearing && props.session?.sessionNo && activeSessionToken.value) {
+      try {
+        await fetchClearSharedCart(props.session.sessionNo, activeSessionToken.value)
+      } catch (error: any) {
+        ElMessage.error(error?.message || '清空桌位购物车失败')
+        return
+      }
+    }
     if (!isClearing && sessionHasOrder.value) {
       cart.commodity = cart.commodity.filter((item: any) => item.fromOrder === true)
       calculateCart()
@@ -376,9 +432,11 @@
       sum += item.number
       if (!item.isGift) {
         const linePay =
-          item.totalPrice != null && item.totalPrice >= 0
-            ? Number(item.totalPrice)
-            : item.number * item.price
+          item.linePayableAmount != null
+            ? Number(item.linePayableAmount)
+            : item.totalPrice != null && item.totalPrice >= 0
+              ? Number(item.totalPrice)
+              : item.number * item.price
         total += linePay
       }
     })
@@ -393,6 +451,94 @@
     cart.member = member.value
     cart.sessionNo = props.session?.sessionNo || ''
   }
+
+  let pricingTimer: ReturnType<typeof setTimeout> | undefined
+  let pricingSequence = 0
+  const pricingSignature = computed(() =>
+    JSON.stringify({
+      storeId: props.table.storeId,
+      memberId: member.value?.id,
+      discountRate: cart.discountRate,
+      items: cart.commodity
+        .map((item: any, index: number) => ({
+          index,
+          dishId: item.id,
+          quantity: item.number,
+          isGift: item.isGift,
+          fromOrder: item.fromOrder,
+          extra: Array.isArray(item.selectedSpecs)
+            ? item.selectedSpecs.reduce(
+                (sum: number, spec: any) => sum + Number(spec.priceAdjust || 0),
+                0
+              )
+            : 0
+        }))
+        .filter((item: any) => item.fromOrder !== true)
+    })
+  )
+
+  const refreshCartPricing = async () => {
+    const sequence = ++pricingSequence
+    const items = cart.commodity
+      .map((item: any, index: number) => ({ item, index }))
+      .filter(({ item }) => item.fromOrder !== true && !item.isGift)
+    if (!props.table.storeId || !items.length) {
+      calculateCart()
+      return
+    }
+    try {
+      const quote = await fetchPricingQuote({
+        storeId: props.table.storeId,
+        userId: member.value?.id,
+        channel: 'CASHIER',
+        items: items.map(({ item, index }) => ({
+          lineKey: String(index),
+          dishId: item.id,
+          quantity: item.number,
+          specExtraPrice: Array.isArray(item.selectedSpecs)
+            ? item.selectedSpecs.reduce(
+                (sum: number, spec: any) => sum + Number(spec.priceAdjust || 0),
+                0
+              )
+            : 0
+        }))
+      })
+      if (sequence !== pricingSequence) return
+      quote.lines.forEach((line) => {
+        const item = cart.commodity[Number(line.lineKey)]
+        if (!item || item.fromOrder === true) return
+        item.price = Number(line.unitSellingPrice)
+        item.lineListAmount = Number(line.lineListAmount)
+        item.lineDiscountAmount = Number(line.lineDiscountAmount)
+        item.linePayableAmount = Number(line.linePayableAmount)
+        item.pricingAdjustments = line.adjustments || []
+        item.availableCampaigns = line.availableCampaigns || []
+      })
+      const submittedTotal = cart.commodity
+        .filter((item: any) => item.fromOrder === true && !item.isGift)
+        .reduce(
+          (sum: number, item: any) => sum + Number(item.linePayableAmount ?? item.totalPrice ?? 0),
+          0
+        )
+      const payable = submittedTotal + Number(quote.payableAmount)
+      cart.total = Number((cart.discountRate ? payable * cart.discountRate : payable).toFixed(2))
+      cart.sum = cart.commodity.reduce((sum, item: any) => sum + Number(item.number || 0), 0)
+    } catch (error: any) {
+      if (sequence === pricingSequence)
+        ElMessage.error(error?.message || '购物车试价失败，请刷新菜品后重试')
+    }
+  }
+
+  watch(
+    pricingSignature,
+    () => {
+      pricingSequence++
+      if (pricingTimer) clearTimeout(pricingTimer)
+      pricingTimer = setTimeout(refreshCartPricing, 120)
+    },
+    { immediate: true }
+  )
+  onBeforeUnmount(() => pricingTimer && clearTimeout(pricingTimer))
 
   // 挂单到购物车
   const pendingToCart = (item: any) => {
@@ -470,9 +616,9 @@
           0
         )
       }
-      const basePrice =
-        item.activityPrice > 0 ? item.activityPrice : item.originalPrice ?? item.price
+      const basePrice = item.salePrice ?? item.price
       return {
+        cartItemId: item.cartItemId,
         dishId: item.id,
         dishName: item.dishName || item.name,
         price: item.price,
@@ -500,7 +646,7 @@
     submitOrderLoading.value = true
     try {
       let hasOrder = false
-      let existingOrderId: number | null = null
+      let existingOrderId: string | number | null = null
       try {
         const orderRes = await fetchGetOrderBySession(sessionNo)
         if (orderRes && orderRes.id) {
@@ -513,18 +659,25 @@
 
       if (!hasOrder) {
         const createData = {
+          idempotencyKey: createOrderIdempotencyKey.value,
           storeId: props.table.storeId,
           tableId: props.table?.id,
           sessionNo,
+          userId: member.value?.id,
           orderType: 0,
           totalPrice: cart.total,
           cartItems: buildCartItemsForOrder(),
           note: cart.note || ''
         }
-        const createRes = await fetchCreateOrder(createData)
+        // 普通下单的 userId 会被后端替换为当前操作员；选择会员时必须走代客下单接口。
+        const createRes = member.value?.id
+          ? await fetchCashierProxyOrder({ ...createData, userId: member.value.id })
+          : await fetchCreateOrder({ ...createData, userId: undefined })
+        createOrderIdempotencyKey.value = generateUUID()
         sessionHasOrder.value = true
         if (createRes?.id) currentOrderId.value = createRes.id
         ElMessage.success('订单已提交，可继续加菜或点击「结算」收银')
+        cart.commodity = cart.commodity.filter((item: any) => item.fromOrder === true)
         await loadTableOrder()
       } else if (existingOrderId) {
         // 已提交菜品只读；加菜始终保存在独立的本地行中，因此无需再按总数量猜测差值。
@@ -538,6 +691,7 @@
             note: cart.note || ''
           })
           ElMessage.success('加菜成功，可继续加菜或点击「结算」收银')
+          cart.commodity = cart.commodity.filter((item: any) => item.fromOrder === true)
           await loadTableOrder()
         } else {
           ElMessage.info('当前购物车无新增菜品')
@@ -654,7 +808,7 @@
     if (cart.commodity.length === 0) {
       next()
     } else {
-      ElMessageBox.confirm('离开当前页，当前购物车将被清空，是否继续？', '提示', {
+      ElMessageBox.confirm('离开当前页后，未提交菜品仍保留在桌位会话，是否继续？', '提示', {
         confirmButtonText: '确定',
         cancelButtonText: '取消',
         type: 'warning'
@@ -668,12 +822,63 @@
     }
   })
 
-  // 初始化
-  onMounted(() => {
-    // 如果有会话，加载订单数据
-    if (props.session?.sessionNo) {
-      loadTableOrder()
-    }
+  let closeSocket: (() => void) | undefined
+  let realtimeTimer: ReturnType<typeof setTimeout> | undefined
+  const refreshFromSocket = () => {
+    if (realtimeTimer) clearTimeout(realtimeTimer)
+    realtimeTimer = setTimeout(() => loadTableOrder(true), 100)
+  }
+  watch(
+    () => [props.session?.sessionNo, props.session?.sessionToken],
+    ([sessionNo, token]) => {
+      closeSocket?.()
+      closeSocket = undefined
+      activeSessionToken.value = token || ''
+      if (!sessionNo) return
+      loadTableOrder(true)
+      refreshSharedCart()
+      if (!token) return
+      closeSocket = connectTableSessionSocket(
+        sessionNo,
+        token,
+        (type) => {
+          if (type === 'SESSION_ENDED') {
+            ElMessage.info('该桌会话已结束')
+            emit('back')
+            emit('refresh')
+          } else if (
+            ['CART_ITEM_ADDED', 'CART_ITEM_UPDATED', 'CART_ITEM_REMOVED', 'CART_CLEARED'].includes(
+              type
+            )
+          ) {
+            refreshSharedCart()
+          } else if (
+            [
+              'CONNECTED',
+              'ORDER_CREATED',
+              'ORDER_UPDATED',
+              'ORDER_PAID',
+              'ORDER_CANCELLED'
+            ].includes(type)
+          ) {
+            refreshFromSocket()
+          }
+        },
+        async () => {
+          const detail = await fetchSessionDetail(sessionNo)
+          if (!detail.sessionToken) throw new Error('桌位会话票据已失效')
+          if (props.session?.sessionNo !== sessionNo) throw new Error('桌位已切换')
+          activeSessionToken.value = detail.sessionToken
+          return detail.sessionToken
+        }
+      )
+    },
+    { immediate: true }
+  )
+  onBeforeUnmount(() => {
+    closeSocket?.()
+    if (realtimeTimer) clearTimeout(realtimeTimer)
+    orderRequestId++
   })
 </script>
 
@@ -683,6 +888,17 @@
     flex-direction: column;
     height: 100%;
     background: linear-gradient(135deg, var(--el-bg-color-page), var(--el-color-primary-light-9));
+  }
+
+  .order-activity {
+    display: flex;
+    gap: 12px;
+    padding: 6px 16px;
+    overflow-x: auto;
+    font-size: 12px;
+    color: var(--el-text-color-secondary);
+    white-space: nowrap;
+    background: var(--el-fill-color-light);
   }
 
   // 收银主体区域

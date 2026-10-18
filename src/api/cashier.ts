@@ -195,6 +195,79 @@ export function fetchAddItemsToOrder(data: {
   })
 }
 
+export interface SharedCartItem {
+  cartItemId: string
+  dishId: Id
+  dishName: string
+  dishPics?: string
+  categoryId?: Id
+  categoryName?: string
+  basePrice: number
+  extraPrice: number
+  price: number
+  quantity: number
+  specText?: string
+  addedByName?: string
+}
+
+const sessionHeaders = (token: string) => ({ 'X-Table-Session-Token': token })
+
+export function fetchSharedCart(sessionNo: string, token: string) {
+  return request.get<SharedCartItem[]>({
+    url: '/shared-cart/list',
+    params: { sessionNo },
+    headers: sessionHeaders(token)
+  })
+}
+
+export function fetchAddSharedCartItem(
+  data: {
+    sessionNo: string
+    dishId: Id
+    quantity: number
+    specText?: string
+    extraPrice: number
+    userId?: Id
+    userName?: string
+  },
+  token: string
+) {
+  return request.post<SharedCartItem>({
+    url: '/shared-cart/add',
+    data,
+    headers: sessionHeaders(token)
+  })
+}
+
+export function fetchUpdateSharedCartItem(
+  sessionNo: string,
+  cartItemId: string,
+  quantity: number,
+  token: string
+) {
+  return request.put<SharedCartItem>({
+    url: '/shared-cart/update',
+    data: { sessionNo, cartItemId, quantity },
+    headers: sessionHeaders(token)
+  })
+}
+
+export function fetchRemoveSharedCartItem(sessionNo: string, cartItemId: string, token: string) {
+  return request.del<boolean>({
+    url: '/shared-cart/remove',
+    params: { sessionNo, cartItemId },
+    headers: sessionHeaders(token)
+  })
+}
+
+export function fetchClearSharedCart(sessionNo: string, token: string) {
+  return request.del<boolean>({
+    url: '/shared-cart/clear',
+    params: { sessionNo },
+    headers: sessionHeaders(token)
+  })
+}
+
 /**
  * 发起支付
  * @param data 支付数据

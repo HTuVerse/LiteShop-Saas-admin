@@ -13,10 +13,10 @@
           :class="{ 'is-gift': item.isGift }"
         >
           <div class="item-thumb">
-            <ElImage :src="item.dishImage" fit="cover">
-              <template #error
-                ><ElIcon><Picture /></ElIcon
-              ></template>
+            <ElImage :src="item.dishImage || defaultDishImage" fit="cover">
+              <template #error>
+                <img class="size-full object-cover" :src="defaultDishImage" alt="" />
+              </template>
             </ElImage>
           </div>
           <div class="item-body">
@@ -24,6 +24,9 @@
               <div class="item-name-wrapper">
                 <div class="item-name">{{ item.dishName }}</div>
                 <span v-if="item.batchNo != null" class="batch-tag">第{{ item.batchNo }}批</span>
+                <ElTag v-if="item.fromOrder !== true && item.addedByName" size="small" type="info">
+                  {{ item.addedByName }} 加入
+                </ElTag>
                 <ElTag v-if="item.isGift" type="danger" size="small" effect="dark">赠</ElTag>
               </div>
               <ElDropdown trigger="click" @command="handleItemCommand($event, index)">
@@ -68,6 +71,9 @@
                 <span class="spec-tag">{{ item.specText }}</span>
               </template>
               <span v-if="item.unit" class="unit">单位：{{ item.unit }}</span>
+            </div>
+            <div v-if="!item.isGift && getPromotionLabels(item).length" class="promotion-labels">
+              <span v-for="label in getPromotionLabels(item)" :key="label">{{ label }}</span>
             </div>
             <div class="item-footer">
               <div class="subtotal">
@@ -116,9 +122,10 @@
     ElScrollbar,
     ElTag
   } from 'element-plus'
-  import { Delete, MoreFilled, Picture } from '@element-plus/icons-vue'
+  import { Delete, MoreFilled } from '@element-plus/icons-vue'
   import { Icon } from '@iconify/vue'
   import { formatMoney } from '@utils/cashier/utils'
+  import defaultDishImage from '@/assets/images/dish/default-dish.png'
 
   // 注入数据
   const { cart, deleteCart, updateCartItemNumber, toggleGiftStatus } = inject<any>('cart')
@@ -126,10 +133,14 @@
 
   // 订单项是否有优惠金额（来自会话订单的 totalPrice/discountPrice）
   const hasItemDiscount = (item: any) => {
-    return item.discountPrice != null && Number(item.discountPrice) > 0 && item.totalPrice != null
+    return (
+      (item.lineDiscountAmount != null && Number(item.lineDiscountAmount) > 0) ||
+      (item.discountPrice != null && Number(item.discountPrice) > 0 && item.totalPrice != null)
+    )
   }
 
   const getLineOriginalTotal = (item: any) => {
+    if (item.lineListAmount != null) return Number(item.lineListAmount)
     if (item.totalPrice != null && item.discountPrice != null && Number(item.discountPrice) > 0) {
       return Number(item.totalPrice) + Number(item.discountPrice)
     }
@@ -137,8 +148,20 @@
   }
 
   const getLinePayTotal = (item: any) => {
+    if (item.linePayableAmount != null) return Number(item.linePayableAmount)
     if (item.totalPrice != null && item.totalPrice >= 0) return Number(item.totalPrice)
     return (item.price ?? 0) * (item.number ?? 0)
+  }
+
+  const getPromotionLabels = (item: any): string[] => {
+    const applied = (item.pricingAdjustments || [])
+      .map((adjustment: any) => adjustment.campaignName || adjustment.description)
+      .filter(Boolean)
+    if (applied.length) return [...new Set<string>(applied)]
+    if (Number(item.discountPrice || 0) > 0) return ['已享订单优惠']
+    return (item.availableCampaigns || [])
+      .slice(0, 2)
+      .map((campaign: any) => `${campaign.campaignName}（${campaign.description}）`)
   }
 
   // 是否显示删除按钮：非桌位模式始终显示；桌位模式下仅「非来自后端订单」的项可删（来自后端的需走退菜）
@@ -208,13 +231,13 @@
     .item-thumb {
       display: grid;
       flex-shrink: 0;
+      place-items: center;
       width: 72px;
       height: 72px;
       overflow: hidden;
       color: var(--el-text-color-placeholder);
       background: var(--el-fill-color-light);
       border-radius: 9px;
-      place-items: center;
 
       .el-image {
         width: 100%;
@@ -294,6 +317,22 @@
 
       .unit {
         color: var(--el-text-color-placeholder);
+      }
+    }
+
+    .promotion-labels {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin: -1px 0 6px;
+
+      span {
+        padding: 1px 5px;
+        font-size: 10px;
+        line-height: 16px;
+        color: var(--el-color-danger);
+        background: var(--el-color-danger-light-9);
+        border-radius: 4px;
       }
     }
 

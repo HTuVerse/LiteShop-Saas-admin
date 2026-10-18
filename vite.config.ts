@@ -31,6 +31,11 @@ export default ({ mode }: { mode: string }) => {
           target: VITE_API_PROXY_URL,
           changeOrigin: true,
           rewrite: (requestPath) => requestPath.replace(/^\/api(?=\/|$)/, '')
+        },
+        '/ws': {
+          target: env.VITE_WS_PROXY_URL || 'ws://localhost:9090',
+          ws: true,
+          changeOrigin: true
         }
       },
       host: true

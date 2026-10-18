@@ -158,6 +158,7 @@ export interface EnvConfig {
   VITE_BASE_URL: string
   // API 地址
   VITE_API_URL: string
+  VITE_WS_BASEURL?: string
   // 是否开启 Mock
   VITE_USE_MOCK?: string
   // 是否开启压缩
