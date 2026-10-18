@@ -104,7 +104,7 @@
       <ArtForm v-if="fileReady" :model="fileForm" label-position="top" :disabled="fileSaving">
         <h3>文件上传</h3>
         <ElAlert type="warning" :closable="false" class="mb-4">
-          公开资源由独立域名直接访问，私有资源位于隔离 Bucket。请保留历史域名、Bucket 与凭据。
+          公开资源由独立域名直接访问，私有资源位于隔离 Bucket。首次保存云存储密钥前，请先为配置服务设置 CONFIG_CREDENTIAL_ENCRYPTION_KEY 并重启；请保留历史域名、Bucket 与凭据。
         </ElAlert>
         <div class="field-grid">
           <ElFormItem label="默认存储方式">
@@ -283,7 +283,7 @@
       acceptMessage(await publishPlatformMessageConfig({ ...messageForm }))
       ElMessage.success('信息配置已保存')
     } catch {
-      ElMessage.error('保存失败，请检查配置或重新加载最新版本')
+      // 请求层已显示服务端的具体错误，避免再叠加一条笼统提示。
     } finally {
       messageSaving.value = false
     }
@@ -295,7 +295,7 @@
       acceptFile(await publishPlatformFileConfig({ ...fileForm }))
       ElMessage.success('文件配置已保存')
     } catch {
-      ElMessage.error('保存失败，请检查配置或重新加载最新版本')
+      // 请求层已显示服务端的具体错误，避免再叠加一条笼统提示。
     } finally {
       fileSaving.value = false
     }
