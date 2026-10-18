@@ -122,16 +122,12 @@
               <ElOption label="私有" value="PRIVATE" />
             </ElSelect>
           </ElFormItem>
-          <ElPopover placement="bottom" :width="270" trigger="click">
-            <template #reference
-              ><ElButton>高级筛选<ArtSvgIcon icon="ri:filter-3-line" /></ElButton
-            ></template>
-            <div class="advanced-filters">
-              <ElInput v-model="filters.tenantId" clearable placeholder="商户 ID" />
-              <ElInput v-model="filters.uploaderId" clearable placeholder="上传者 ID" />
-              <p>输入 ID 后点击搜索应用筛选</p>
-            </div>
-          </ElPopover>
+          <ElFormItem class="id-field">
+            <ElInput v-model="filters.tenantId" clearable placeholder="商户 ID" />
+          </ElFormItem>
+          <ElFormItem class="id-field">
+            <ElInput v-model="filters.uploaderId" clearable placeholder="上传者 ID" />
+          </ElFormItem>
           <ElButton type="primary" native-type="submit">搜索</ElButton>
           <ElButton @click="resetFilters">重置</ElButton>
         </ArtForm>
@@ -191,27 +187,28 @@
                 </div>
               </template>
               <template #resourceActions="{ row }">
-                <ElSpace>
-                  <ElButton text type="primary" @click.stop="preview(row)">预览</ElButton>
-                  <ElDropdown @command="(command: string) => fileCommand(command, row)">
-                    <ElButton text aria-label="更多文件操作" @click.stop
-                      ><ArtSvgIcon icon="ri:more-2-fill"
-                    /></ElButton>
-                    <template #dropdown>
-                      <ElDropdownMenu>
-                        <ElDropdownItem command="download">下载</ElDropdownItem>
-                        <ElDropdownItem command="usage">查看引用</ElDropdownItem>
-                        <ElDropdownItem v-if="row.visibility !== 'PRIVATE'" command="copy"
-                          >复制链接</ElDropdownItem
-                        >
-                        <ElDropdownItem command="rename">重命名</ElDropdownItem>
-                        <ElDropdownItem command="move">移动到文件夹</ElDropdownItem>
-                        <ElDropdownItem command="visibility">切换公开/私有</ElDropdownItem>
-                        <ElDropdownItem command="delete">删除</ElDropdownItem>
-                      </ElDropdownMenu>
-                    </template>
-                  </ElDropdown>
-                </ElSpace>
+                <ElDropdown
+                  trigger="hover"
+                  @command="(command: string) => fileCommand(command, row)"
+                >
+                  <ElButton text aria-label="文件操作" @click.stop>
+                    <ArtSvgIcon icon="ri:more-2-fill" />
+                  </ElButton>
+                  <template #dropdown>
+                    <ElDropdownMenu>
+                      <ElDropdownItem command="preview">预览</ElDropdownItem>
+                      <ElDropdownItem command="download">下载</ElDropdownItem>
+                      <ElDropdownItem command="usage">查看引用</ElDropdownItem>
+                      <ElDropdownItem v-if="row.visibility !== 'PRIVATE'" command="copy"
+                        >复制链接</ElDropdownItem
+                      >
+                      <ElDropdownItem command="rename">重命名</ElDropdownItem>
+                      <ElDropdownItem command="move">移动到文件夹</ElDropdownItem>
+                      <ElDropdownItem command="visibility">切换公开/私有</ElDropdownItem>
+                      <ElDropdownItem divided command="delete">删除</ElDropdownItem>
+                    </ElDropdownMenu>
+                  </template>
+                </ElDropdown>
               </template>
             </ArtTable>
           </section>
@@ -220,36 +217,17 @@
             <template v-if="activeFile">
               <div class="detail-preview" @click="preview(activeFile)">
                 <ElImage
-                  v-if="
-                    isImage(activeFile) && activeFile.url && activeFile.visibility !== 'PRIVATE'
-                  "
-                  :src="activeFile.url"
+                  v-if="isImage(activeFile) && detailImageUrl"
+                  :src="detailImageUrl"
                   fit="cover"
                 />
                 <img v-else class="detail-file-icon" :src="fileIcon(activeFile)" alt="" />
               </div>
-              <div class="detail-title-row">
-                <strong :title="activeFile.originalFileName">{{
-                  activeFile.originalFileName
-                }}</strong>
-                <ElButton text aria-label="重命名文件" @click="fileCommand('rename', activeFile)"
-                  ><ArtSvgIcon icon="ri:edit-line"
-                /></ElButton>
-              </div>
-              <div class="detail-tags">
-                <ElTag size="small" effect="light">{{ fileTypeLabel(activeFile) }}</ElTag>
-                <ElTag
-                  size="small"
-                  :type="activeFile.visibility === 'PRIVATE' ? 'warning' : 'success'"
-                  effect="light"
-                >
-                  {{ activeFile.visibility === 'PRIVATE' ? '私有' : '公开' }}
-                </ElTag>
-              </div>
               <div class="detail-section">
                 <h3>文件信息</h3>
                 <dl>
-                  <dt>文件大小</dt><dd>{{ formatSize(activeFile.size) }}</dd> <dt>文件类型</dt
+                  <dt>文件名称</dt><dd>{{ activeFile.originalFileName }}</dd> <dt>文件大小</dt
+                  ><dd>{{ formatSize(activeFile.size) }}</dd> <dt>文件类型</dt
                   ><dd>{{ activeFile.contentType || '-' }}</dd> <dt>上传时间</dt
                   ><dd>{{ formatDate(activeFile.createdAt) }}</dd> <dt>存储方式</dt
                   ><dd>{{ storageLabels[activeFile.storageType] || '-' }}</dd> <dt>所在文件夹</dt
@@ -257,32 +235,15 @@
                   ><dd>{{
                     activeFile.tenantId === '0' ? '平台' : activeFile.tenantId || '历史资源'
                   }}</dd>
-                  <dt>上传者 ID</dt><dd>{{ activeFile.uploaderId || '未知' }}</dd>
+                  <dt>上传者 ID</dt><dd>{{ activeFile.uploaderId || '未知' }}</dd> <dt>访问权限</dt
+                  ><dd>{{ activeFile.visibility === 'PRIVATE' ? '私有' : '公开' }}</dd>
                 </dl>
-              </div>
-              <div class="detail-section detail-actions">
-                <h3>快捷操作</h3>
-                <ElButton @click="download(activeFile)"
-                  ><ArtSvgIcon icon="ri:download-2-line" />下载文件</ElButton
-                >
-                <ElButton @click="openMove([activeFile.id])"
-                  ><ArtSvgIcon icon="ri:folder-transfer-line" />移动到文件夹</ElButton
-                >
-                <ElButton @click="showUsages(activeFile)"
-                  ><ArtSvgIcon icon="ri:links-line" />查看引用</ElButton
-                >
-                <ElButton v-if="activeFile.visibility !== 'PRIVATE'" @click="copyUrl(activeFile)"
-                  ><ArtSvgIcon icon="ri:link" />复制链接</ElButton
-                >
-                <ElButton type="danger" plain @click="remove([activeFile.id])"
-                  ><ArtSvgIcon icon="ri:delete-bin-line" />删除文件</ElButton
-                >
               </div>
             </template>
             <div v-else class="detail-empty">
               <img :src="emptyFilesIcon" alt="" />
               <strong>选择一个文件</strong>
-              <p>点击列表中的文件，查看文件信息与快捷操作。</p>
+              <p>点击列表中的文件，查看图片与文件信息。</p>
             </div>
           </aside>
         </div>
@@ -422,6 +383,7 @@
   const previewVisible = ref(false)
   const previewFile = ref<ResourceFile>()
   const previewUrl = ref('')
+  const detailImageUrl = ref('')
   const moveVisible = ref(false)
   const storageConfigVisible = ref(false)
   const usageVisible = ref(false)
@@ -539,7 +501,7 @@
         {
           prop: 'operation',
           label: '操作',
-          width: 95,
+          width: 66,
           fixed: 'right',
           useSlot: true,
           slotName: 'resourceActions'
@@ -594,6 +556,39 @@
       : size < 1048576
         ? `${(size / 1024).toFixed(1)} KB`
         : `${(size / 1048576).toFixed(1)} MB`
+
+  watch(
+    activeFile,
+    async (file, _previous, onCleanup) => {
+      detailImageUrl.value = ''
+      if (!file || !isImage(file)) return
+      if (file.visibility !== 'PRIVATE') {
+        detailImageUrl.value = file.url || ''
+        return
+      }
+
+      let cancelled = false
+      let blobUrl = ''
+      onCleanup(() => {
+        cancelled = true
+        if (blobUrl) URL.revokeObjectURL(blobUrl)
+      })
+      try {
+        const signedUrl = await getResourceAccessUrl(file.id)
+        if (cancelled) return
+        if (signedUrl) {
+          detailImageUrl.value = signedUrl
+          return
+        }
+        blobUrl = URL.createObjectURL(await downloadResource(file.id))
+        if (cancelled) URL.revokeObjectURL(blobUrl)
+        else detailImageUrl.value = blobUrl
+      } catch {
+        // 无法加载缩略图时展示文件类型图标。
+      }
+    },
+    { immediate: true }
+  )
 
   async function loadFolders() {
     folders.value = await listResourceFolders()
@@ -765,6 +760,10 @@
     }
   }
   async function fileCommand(command: string, file: ResourceFile) {
+    if (command === 'preview') {
+      await preview(file)
+      return
+    }
     if (command === 'download') {
       await download(file)
       return
@@ -939,16 +938,18 @@
 
   .workspace-toolbar {
     display: flex;
-    gap: 16px;
+    gap: 12px;
     align-items: center;
     justify-content: space-between;
     min-height: 72px;
     padding: 14px 20px;
+    overflow-x: auto;
     border-bottom: 1px solid var(--el-border-color-lighter);
   }
 
   .workspace-context {
     display: flex;
+    flex: none;
     gap: 9px;
     align-items: center;
     min-width: 0;
@@ -987,7 +988,8 @@
 
   .primary-actions {
     display: flex;
-    flex-wrap: wrap;
+    flex: none;
+    flex-wrap: nowrap;
     gap: 8px;
     align-items: center;
     justify-content: flex-end;
@@ -997,8 +999,7 @@
     margin: 0;
   }
 
-  .primary-actions :deep(.el-button .art-svg-icon),
-  .detail-actions :deep(.el-button .art-svg-icon) {
+  .primary-actions :deep(.el-button .art-svg-icon) {
     margin-right: 5px;
   }
 
@@ -1014,11 +1015,12 @@
 
   .search-form {
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: 8px;
     align-items: center;
     padding: 14px 20px;
     margin: 0;
+    overflow-x: auto;
     border-bottom: 1px solid var(--el-border-color-lighter);
   }
 
@@ -1027,30 +1029,25 @@
   }
 
   .search-form :deep(.el-button) {
+    flex: none;
     margin: 0;
   }
 
   .keyword-field {
-    width: min(270px, 100%);
+    flex: 1 0 140px;
+    min-width: 140px;
   }
 
   .filter-field {
-    width: 140px;
+    flex: 0 0 105px;
   }
 
   .filter-field :deep(.el-select) {
     width: 100%;
   }
 
-  .advanced-filters {
-    display: grid;
-    gap: 10px;
-  }
-
-  .advanced-filters p {
-    margin: 0;
-    font-size: 12px;
-    color: var(--el-text-color-placeholder);
+  .id-field {
+    flex: 0 0 95px;
   }
 
   .content-layout {
@@ -1172,27 +1169,6 @@
     object-fit: contain;
   }
 
-  .detail-title-row {
-    display: flex;
-    gap: 6px;
-    align-items: center;
-    justify-content: space-between;
-    margin-top: 10px;
-  }
-
-  .detail-title-row strong {
-    overflow: hidden;
-    font-size: 14px;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .detail-tags {
-    display: flex;
-    gap: 6px;
-    margin-top: 8px;
-  }
-
   .detail-section {
     padding-top: 16px;
     margin-top: 18px;
@@ -1221,17 +1197,6 @@
     margin: 0;
     color: var(--el-text-color-regular);
     overflow-wrap: anywhere;
-  }
-
-  .detail-actions {
-    display: grid;
-    gap: 7px;
-  }
-
-  .detail-actions :deep(.el-button) {
-    justify-content: flex-start;
-    width: 100%;
-    margin: 0;
   }
 
   .detail-empty {
@@ -1298,15 +1263,6 @@
   @media (width <= 1400px) {
     .content-layout {
       grid-template-columns: minmax(0, 1fr) 230px;
-    }
-
-    .workspace-toolbar {
-      flex-direction: column;
-      align-items: flex-start;
-    }
-
-    .primary-actions {
-      justify-content: flex-start;
     }
   }
 
