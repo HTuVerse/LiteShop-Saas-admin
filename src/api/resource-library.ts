@@ -39,6 +39,12 @@ export interface ResourcePage {
   size: number
 }
 
+export interface ResourceAccess {
+  visibility: 'PUBLIC' | 'PRIVATE'
+  url: string
+  expiresAt: string | null
+}
+
 const base = '/file-upload/admin/resources'
 
 export const listResources = (params: ResourceQuery) =>
@@ -79,8 +85,11 @@ export const deleteResources = (ids: string[]) =>
 export const downloadResource = (id: string) =>
   request.get<Blob>({ url: `${base}/${id}/download`, responseType: 'blob', timeout: 120000 })
 
-export const getResourceAccessUrl = (id: string) =>
-  request.get<string | null>({ url: `${base}/${id}/access` })
+/** 私有资源按次授权；本地私有文件由已有鉴权下载接口取 Blob。 */
+export const getResourceAccessUrl = async (id: string) => {
+  const access = await request.get<ResourceAccess>({ url: `/file-upload/resources/${id}/access` })
+  return access.visibility === 'PRIVATE' && !access.expiresAt ? null : access.url
+}
 
 export const setResourceVisibility = (id: string, visibility: 'PUBLIC' | 'PRIVATE') =>
   request.put<ResourceFile>({ url: `${base}/${id}/visibility`, data: { visibility } })

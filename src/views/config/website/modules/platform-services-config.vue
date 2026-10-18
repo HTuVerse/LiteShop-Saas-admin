@@ -104,7 +104,7 @@
       <ArtForm v-if="fileReady" :model="fileForm" label-position="top" :disabled="fileSaving">
         <h3>文件上传</h3>
         <ElAlert type="warning" :closable="false" class="mb-4">
-          公开资源由独立域名直接访问，私有资源位于隔离 Bucket。首次保存云存储密钥前，请先为配置服务设置 CONFIG_CREDENTIAL_ENCRYPTION_KEY 并重启；请保留历史域名、Bucket 与凭据。
+          统一公开入口可让业务图片地址与存储平台解耦。启用前请将该路径转发到文件服务；旧源站域名和 Bucket 仍需保留。首次保存云存储密钥前，请先为配置服务设置 CONFIG_CREDENTIAL_ENCRYPTION_KEY 并重启。
         </ElAlert>
         <div class="field-grid">
           <ElFormItem label="默认存储方式">
@@ -118,6 +118,10 @@
           <ElFormItem label="单文件上限（MB）"
             ><ElInputNumber v-model="fileForm.maxSize" :min="1" :max="2048"
           /></ElFormItem>
+          <ElFormItem class="full" label="统一公开资源入口">
+            <ElInput v-model="fileForm.publicDeliveryBaseUrl" placeholder="https://static.example.com/images/resource" />
+            <div class="field-hint">留空沿用各存储驱动的公开域名；启用后公开 URL 为此地址加资源 ID。</div>
+          </ElFormItem>
           <template v-if="fileForm.storageMode === 'LOCAL'">
             <ElFormItem label="本地上传目录"><ElInput v-model="fileForm.uploadPath" /></ElFormItem>
             <ElFormItem label="本地公开访问地址"
@@ -348,6 +352,10 @@
   }
   .full {
     grid-column: 1 / -1;
+  }
+  .field-hint {
+    font-size: 12px;
+    color: var(--el-text-color-secondary);
   }
   .actions {
     display: flex;

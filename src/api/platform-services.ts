@@ -24,6 +24,7 @@ export interface PlatformServiceConfig {
   storageMode: 'LOCAL' | 'MINIO' | 'OSS' | 'QINIU'
   uploadPath: string
   baseUrl: string
+  publicDeliveryBaseUrl: string
   allowedTypes: string
   maxSize: number
   qiniuAccessKey: string
@@ -88,6 +89,7 @@ export type PlatformFileConfig = Pick<
   | 'storageMode'
   | 'uploadPath'
   | 'baseUrl'
+  | 'publicDeliveryBaseUrl'
   | 'allowedTypes'
   | 'maxSize'
   | 'qiniuAccessKey'
