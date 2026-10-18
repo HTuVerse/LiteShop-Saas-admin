@@ -40,11 +40,14 @@
           >
             <el-icon><Plus /></el-icon>
           </ElUpload>
-          <div class="upload-tip">建议尺寸 750x340，支持 jpg/png 格式，不超过2MB</div>
+          <div class="upload-tip">
+            建议尺寸 {{ formData.position === 1 ? '750x500' : '750x340' }}，支持 jpg/png 格式，不超过2MB
+          </div>
+          <ElButton v-if="userStore.isSuperAdmin" plain @click="pickerVisible = true">从资源库选择</ElButton>
         </div>
       </ElFormItem>
 
-      <ElFormItem label="跳转类型" prop="linkType">
+      <ElFormItem v-if="formData.position !== 1" label="跳转类型" prop="linkType">
         <ElRadioGroup v-model="formData.linkType">
           <ElRadio :value="3">不跳转</ElRadio>
           <ElRadio :value="1">小程序页面</ElRadio>
@@ -52,7 +55,7 @@
         </ElRadioGroup>
       </ElFormItem>
 
-      <ElFormItem v-if="formData.linkType !== 3" label="跳转链接" prop="linkUrl">
+      <ElFormItem v-if="formData.position !== 1 && formData.linkType !== 3" label="跳转链接" prop="linkUrl">
         <ElInput
           v-model="formData.linkUrl"
           :placeholder="
@@ -111,6 +114,8 @@
       </ElFormItem>
     </ArtForm>
 
+    <ResourcePicker v-if="userStore.isSuperAdmin" v-model="pickerVisible" @select="selectResource" />
+
     <template #footer>
       <ElButton @click="handleClose">取消</ElButton>
       <ElButton type="primary" :loading="submitLoading" @click="handleSubmit">确定</ElButton>
@@ -126,6 +131,9 @@
   import { Plus } from '@element-plus/icons-vue'
   import { fetchAddBanner, fetchUpdateBanner } from '@/api/config-manage'
   import { useUserStore } from '@/store/modules/user'
+  import { BANNER_POSITIONS } from '../banner-positions'
+  import ResourcePicker from '@/components/business/ResourcePicker.vue'
+  import type { ResourceFile } from '@/api/resource-library'
 
   type Banner = Api.Config.Banner
   type BannerFormData = Api.Config.BannerFormData
@@ -157,6 +165,14 @@
 
   // 文件列表
   const fileList = ref<UploadFile[]>([])
+  const pickerVisible = ref(false)
+
+  const selectResource = (file: ResourceFile) => {
+    if (!file.url) return
+    formData.value.imageUrl = file.url
+    fileList.value = [{ name: file.originalFileName, url: file.url, uid: Date.now() } as UploadFile]
+    formRef.value?.validateField('imageUrl')
+  }
 
   // 时间范围
   const timeRange = ref<[string, string] | null>(null)
@@ -176,18 +192,14 @@
   })
 
   // 位置选项
-  const positionOptions = [
-    { label: '首页轮播图', value: 1 },
-    { label: '点餐页轮播图', value: 2 },
-    { label: '个人中心轮播图', value: 3 },
-    { label: '活动页轮播图', value: 4 }
-  ]
+  const positionOptions = BANNER_POSITIONS
 
   // 位置描述映射到code
   const positionDescToCode: Record<string, number> = {
+    首页背景轮播图: 1,
     首页轮播图: 1,
     点餐页轮播图: 2,
-    个人中心轮播图: 3,
+    首页活动轮播图: 4,
     活动页轮播图: 4
   }
 
@@ -318,6 +330,11 @@
 
       submitLoading.value = true
 
+      // 背景轮播仅展示图片，不配置跳转。
+      if (formData.value.position === 1) {
+        formData.value.linkType = 3
+        formData.value.linkUrl = ''
+      }
       // 处理时间范围
       if (timeRange.value && timeRange.value.length === 2) {
         formData.value.startTime = timeRange.value[0]
