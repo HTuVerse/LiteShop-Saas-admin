@@ -99,14 +99,10 @@ export function normalizeDishItem(dish: any): any {
     })
   }
 
-  // 处理价格：price 是活动价格，originalPrice 是原价
-  // 当活动价格为空/0时，使用原价
-  const activityPrice = Number(dish.price) || 0
-  const originalPrice = Number(dish.originalPrice) || 0
-  // 实际显示/计算用的价格：优先活动价，没有则用原价
-  const displayPrice = activityPrice > 0 ? activityPrice : originalPrice
-  // 是否有活动价（用于显示划线价）
-  const hasActivityPrice = activityPrice > 0 && originalPrice > 0 && activityPrice < originalPrice
+  const salePrice = Number(dish.effectiveSalePrice ?? dish.salePrice) || 0
+  const displayPrice = Number(dish.displayPrice ?? salePrice) || 0
+  const campaignPrice = dish.campaignPrice == null ? undefined : Number(dish.campaignPrice)
+  const hasCampaignPrice = displayPrice < salePrice
 
   // 处理图片：从 dishPics 中取第一张
   let dishImage = ''
@@ -119,12 +115,17 @@ export function normalizeDishItem(dish: any): any {
     id: dish.id,
     dishName: dish.dishName,
     dishDesc: dish.dishDesc || '',
-    price: displayPrice, // 实际使用的价格
-    activityPrice, // 活动价格（可能为0）
-    originalPrice, // 原价
-    hasActivityPrice, // 是否有活动价（用于显示划线价）
+    price: displayPrice,
+    salePrice,
+    displayPrice,
+    campaignPrice,
+    hasCampaignPrice,
+    priceSource: dish.priceSource,
+    appliedCampaignName: dish.appliedCampaignName,
+    availableCampaigns: dish.availableCampaigns || [],
     dishImage, // 从 dishPics 取第一张图片
     stock: dish.stock ?? 9999,
+    soldOut: Number(dish.soldOut || 0),
     unit: dish.unit || '份',
     categoryId: dish.categoryId,
     categoryName: dish.categoryName || '',
@@ -165,6 +166,69 @@ export function normalizeUserItem(user: any): any {
   }
 }
 
+/**
+ * 将后端订单明细转换为收银台购物车行。
+ *
+ * 新版订单接口使用 unitSellingPrice / discountAmount / linePayableAmount，
+ * 同时保留旧字段回退，避免滚动升级期间已提交订单的金额被显示为 0。
+ */
+export function normalizeOrderItemForCart(item: any): any {
+  const quantity = Number(item.quantity ?? item.number ?? 1)
+  const safeQuantity = Number.isFinite(quantity) && quantity > 0 ? quantity : 1
+  const unitSellingPrice = Number(item.unitSellingPrice ?? item.price)
+  const linePayableAmount = Number(
+    item.linePayableAmount ??
+      item.totalPrice ??
+      item.subtotal ??
+      (Number.isFinite(unitSellingPrice) ? unitSellingPrice * safeQuantity : 0)
+  )
+  const discountAmount = Number(item.discountAmount ?? item.discountPrice ?? 0)
+  const unitListPrice = Number(item.unitListPrice)
+  const lineListAmount = Number(
+    item.lineListAmount ??
+      (Number.isFinite(unitListPrice)
+        ? unitListPrice * safeQuantity
+        : linePayableAmount + discountAmount)
+  )
+  const safeLinePayableAmount = Number.isFinite(linePayableAmount) ? linePayableAmount : 0
+  const safeDiscountAmount = Number.isFinite(discountAmount) ? discountAmount : 0
+  const safeLineListAmount = Number.isFinite(lineListAmount)
+    ? lineListAmount
+    : safeLinePayableAmount + safeDiscountAmount
+  const safeUnitSellingPrice = Number.isFinite(unitSellingPrice)
+    ? unitSellingPrice
+    : safeLinePayableAmount / safeQuantity
+
+  return {
+    id: item.dishId,
+    orderItemId: item.id != null ? item.id : undefined,
+    batchNo: item.batchNo != null ? Number(item.batchNo) : undefined,
+    submittedByUserId: item.submittedByUserId,
+    submittedByName: item.submittedByName,
+    dishName: item.dishName,
+    price: safeUnitSellingPrice,
+    number: safeQuantity,
+    lineListAmount: safeLineListAmount,
+    lineDiscountAmount: safeDiscountAmount,
+    linePayableAmount: safeLinePayableAmount,
+    // 兼容尚未切换到新版金额字段的收银台展示逻辑。
+    totalPrice: safeLinePayableAmount,
+    discountPrice: safeDiscountAmount,
+    dishImage: item.dishImage || item.mainPic || '',
+    stock: 999,
+    saleStatus: 1,
+    categoryId: item.categoryId,
+    categoryName: item.categoryName || '',
+    specText: item.specText ?? item.specOptionsText ?? '',
+    specKey:
+      (item.specText ?? item.specOptionsText)
+        ? `spec_${item.dishId}_${item.specText || item.specOptionsText}`
+        : '',
+    isGift: Number(item.isGift) === 1 ? 1 : 0,
+    fromOrder: true
+  }
+}
+
 // 将购物车数据转换为创建订单请求格式
 export function convertCartToOrderRequest(
   cart: any,
@@ -184,7 +248,7 @@ export function convertCartToOrderRequest(
     categoryId: String(item.categoryId || ''),
     dishName: item.dishName,
     price: item.price,
-    basePrice: item.originalPrice || item.price,
+    basePrice: item.salePrice,
     extraPrice:
       item.selectedSpecs?.reduce((sum: number, s: any) => sum + (s.priceAdjust || 0), 0) || 0,
     categoryName: item.categoryName || '',

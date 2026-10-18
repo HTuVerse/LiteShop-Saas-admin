@@ -2,103 +2,117 @@
   <div class="cart-list-container">
     <ElScrollbar v-if="cart.commodity.length > 0" class="cart-scroll" :always="true">
       <div class="cart-list">
-        <div
-          v-for="(item, index) in cart.commodity"
-          :key="
-            item.orderItemId != null
-              ? `oi-${item.orderItemId}`
-              : `${item.id}-${item.specKey || ''}-${index}`
-          "
-          class="cart-item"
-          :class="{ 'is-gift': item.isGift }"
-        >
-          <div class="item-thumb">
-            <ElImage :src="item.dishImage || defaultDishImage" fit="cover">
-              <template #error>
-                <img class="size-full object-cover" :src="defaultDishImage" alt="" />
-              </template>
-            </ElImage>
-          </div>
-          <div class="item-body">
-            <div class="item-header">
-              <div class="item-name-wrapper">
-                <div class="item-name">{{ item.dishName }}</div>
-                <span v-if="item.batchNo != null" class="batch-tag">第{{ item.batchNo }}批</span>
-                <ElTag v-if="item.fromOrder !== true && item.addedByName" size="small" type="info">
-                  {{ item.addedByName }} 加入
-                </ElTag>
-                <ElTag v-if="item.isGift" type="danger" size="small" effect="dark">赠</ElTag>
-              </div>
-              <ElDropdown trigger="click" @command="handleItemCommand($event, index)">
-                <ElButton class="more-btn" text circle :icon="MoreFilled" />
-                <template #dropdown>
-                  <ElDropdownMenu>
-                    <ElDropdownItem
-                      v-auth="[
-                        'restaurant:order:gift',
-                        'operations:direct-cashier:gift',
-                        'operations:table-cashier:gift'
-                      ]"
-                      command="gift"
-                    >
-                      <Icon icon="qlementine-icons:gift-24" />
-                      {{ item.isGift ? '取消赠菜' : '标记赠菜' }}
-                    </ElDropdownItem>
-                    <ElDropdownItem
-                      v-if="showDeleteButton(item)"
-                      command="delete"
-                      divided
-                      class="delete-command"
-                    >
-                      <ElIcon><Delete /></ElIcon>
-                      删除菜品
-                    </ElDropdownItem>
-                  </ElDropdownMenu>
+        <template v-for="group in groupedCart" :key="group.key">
+          <button
+            v-if="tableInfo"
+            type="button"
+            class="batch-heading"
+            :aria-expanded="!collapsedGroups.includes(group.key)"
+            @click="toggleGroup(group.key)"
+          >
+            <span>{{ group.title }}</span>
+            <span
+              >{{ collapsedGroups.includes(group.key) ? '展开' : '收起' }} ·
+              {{ group.lines.length }} 种</span
+            >
+          </button>
+          <div
+            v-for="{ item, index } in group.lines"
+            v-show="!collapsedGroups.includes(group.key)"
+            :key="
+              item.orderItemId != null
+                ? `oi-${item.orderItemId}`
+                : `${item.id}-${item.specKey || ''}-${index}`
+            "
+            class="cart-item"
+            :class="{ 'is-gift': item.isGift }"
+          >
+            <div class="item-thumb">
+              <ElImage :src="item.dishImage || defaultDishImage" fit="cover">
+                <template #error>
+                  <img class="size-full object-cover" :src="defaultDishImage" alt="" />
                 </template>
-              </ElDropdown>
+              </ElImage>
             </div>
-            <div class="item-specs">
-              <template v-if="item.selectedSpecs && item.selectedSpecs.length > 0">
-                <span
-                  v-for="spec in item.selectedSpecs"
-                  :key="spec.specName + spec.specValue"
-                  class="spec-tag"
-                >
-                  {{ spec.specValue }}
-                </span>
-              </template>
-              <template v-else-if="item.specText">
-                <span class="spec-tag">{{ item.specText }}</span>
-              </template>
-              <span v-if="item.unit" class="unit">单位：{{ item.unit }}</span>
-            </div>
-            <div v-if="!item.isGift && getPromotionLabels(item).length" class="promotion-labels">
-              <span v-for="label in getPromotionLabels(item)" :key="label">{{ label }}</span>
-            </div>
-            <div class="item-footer">
-              <div class="subtotal">
-                <span class="subtotal-price" :class="{ 'gift-price': item.isGift }">
-                  <template v-if="item.isGift">￥0.00（赠）</template>
-                  <template v-else-if="hasItemDiscount(item)">
-                    <span class="subtotal-original"
-                      >￥{{ formatMoney(getLineOriginalTotal(item)) }}</span
-                    >
-                    <span class="subtotal-actual">￥{{ formatMoney(getLinePayTotal(item)) }}</span>
+            <div class="item-body">
+              <div class="item-header">
+                <div class="item-name-wrapper">
+                  <div class="item-name">{{ item.dishName }}</div>
+                  <ElTag v-if="item.isGift" type="danger" size="small" effect="dark">赠</ElTag>
+                </div>
+                <ElDropdown trigger="click" @command="handleItemCommand($event, index)">
+                  <ElButton class="more-btn" text circle :icon="MoreFilled" />
+                  <template #dropdown>
+                    <ElDropdownMenu>
+                      <ElDropdownItem
+                        v-auth="[
+                          'restaurant:order:gift',
+                          'operations:direct-cashier:gift',
+                          'operations:table-cashier:gift'
+                        ]"
+                        command="gift"
+                      >
+                        <Icon icon="qlementine-icons:gift-24" />
+                        {{ item.isGift ? '取消赠菜' : '标记赠菜' }}
+                      </ElDropdownItem>
+                      <ElDropdownItem
+                        v-if="showDeleteButton(item)"
+                        command="delete"
+                        divided
+                        class="delete-command"
+                      >
+                        <ElIcon><Delete /></ElIcon>
+                        删除菜品
+                      </ElDropdownItem>
+                    </ElDropdownMenu>
                   </template>
-                  <template v-else>￥{{ formatMoney(item.price * item.number) }}</template>
-                </span>
+                </ElDropdown>
               </div>
-              <ElInputNumber
-                v-model="item.number"
-                :min="1"
-                :max="item.stock || 9999"
-                :disabled="tableInfo && item.fromOrder === true"
-                size="small"
-                @change="(val: number | undefined) => handleNumberChange(index, val ?? 1)"
-              />
+              <div class="item-specs">
+                <template v-if="item.selectedSpecs && item.selectedSpecs.length > 0">
+                  <span
+                    v-for="spec in item.selectedSpecs"
+                    :key="spec.specName + spec.specValue"
+                    class="spec-tag"
+                  >
+                    {{ spec.specValue }}
+                  </span>
+                </template>
+                <template v-else-if="item.specText">
+                  <span class="spec-tag">{{ item.specText }}</span>
+                </template>
+                <span v-if="item.unit" class="unit">单位：{{ item.unit }}</span>
+              </div>
+              <div v-if="!item.isGift && getPromotionLabels(item).length" class="promotion-labels">
+                <span v-for="label in getPromotionLabels(item)" :key="label">{{ label }}</span>
+              </div>
+              <div class="item-footer">
+                <div class="subtotal">
+                  <span class="subtotal-price" :class="{ 'gift-price': item.isGift }">
+                    <template v-if="item.isGift">￥0.00（赠）</template>
+                    <template v-else-if="hasItemDiscount(item)">
+                      <span class="subtotal-original"
+                        >￥{{ formatMoney(getLineOriginalTotal(item)) }}</span
+                      >
+                      <span class="subtotal-actual"
+                        >￥{{ formatMoney(getLinePayTotal(item)) }}</span
+                      >
+                    </template>
+                    <template v-else>￥{{ formatMoney(item.price * item.number) }}</template>
+                  </span>
+                </div>
+                <ElInputNumber
+                  v-model="item.number"
+                  :min="1"
+                  :max="item.stock || 9999"
+                  :disabled="tableInfo && item.fromOrder === true"
+                  size="small"
+                  @change="(val: number | undefined) => handleNumberChange(index, val ?? 1)"
+                />
+              </div>
             </div>
           </div>
-        </div>
+        </template>
       </div>
     </ElScrollbar>
 
@@ -109,7 +123,7 @@
 </template>
 
 <script setup lang="ts">
-  import { inject } from 'vue'
+  import { computed, inject, ref } from 'vue'
   import {
     ElButton,
     ElDropdown,
@@ -130,6 +144,38 @@
   // 注入数据
   const { cart, deleteCart, updateCartItemNumber, toggleGiftStatus } = inject<any>('cart')
   const tableInfo = inject<any>('tableInfo', null)
+  const ordinal = (value: number) => {
+    const names = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十']
+    return names[value - 1] || String(value)
+  }
+  const collapsedGroups = ref<string[]>([])
+  const toggleGroup = (key: string) => {
+    collapsedGroups.value = collapsedGroups.value.includes(key)
+      ? collapsedGroups.value.filter((value) => value !== key)
+      : [...collapsedGroups.value, key]
+  }
+  const groupedCart = computed(() => {
+    const lines = cart.commodity.map((item: any, index: number) => ({ item, index }))
+    if (!tableInfo) return [{ key: 'all', title: '', lines }]
+    const batches = new Map<string, typeof lines>()
+    for (const line of lines) {
+      const key = line.item.fromOrder === true ? `batch-${line.item.batchNo || 1}` : 'draft'
+      if (!batches.has(key)) batches.set(key, [])
+      batches.get(key)!.push(line)
+    }
+    return [...batches.entries()]
+      .sort(([a], [b]) =>
+        a === 'draft' ? 1 : b === 'draft' ? -1 : Number(a.slice(6)) - Number(b.slice(6))
+      )
+      .map(([key, batchLines]) => ({
+        key,
+        title:
+          key === 'draft'
+            ? '待提交菜品'
+            : `第${ordinal(Number(key.slice(6)))}批（下单用户：${batchLines[0].item.submittedByName || '未记录'}）`,
+        lines: batchLines
+      }))
+  })
 
   // 订单项是否有优惠金额（来自会话订单的 totalPrice/discountPrice）
   const hasItemDiscount = (item: any) => {
@@ -208,6 +254,19 @@
 
   .cart-list {
     padding-right: 8px;
+  }
+
+  .batch-heading {
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+    padding: 10px 8px;
+    color: var(--el-text-color-primary);
+    text-align: left;
+    cursor: pointer;
+    background: var(--el-fill-color-light);
+    border: 0;
+    border-radius: 6px;
   }
 
   .cart-item {

@@ -118,6 +118,10 @@ export function fetchCashierMemberByPhone(phone: string) {
   })
 }
 
+export function fetchCashierMemberById(userId: Id) {
+  return request.get<UserItem | null>({ url: '/user/cashier/memberById', params: { userId } })
+}
+
 /**
  * 创建订单
  * @param data 订单数据

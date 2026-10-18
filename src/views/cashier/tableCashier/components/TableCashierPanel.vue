@@ -1,7 +1,7 @@
 <template>
   <div class="table-cashier-panel">
-    <div v-if="orderActivities.length" class="order-activity">
-      <span v-for="activity in orderActivities" :key="activity.key">{{ activity.text }}</span>
+    <div v-if="onlinePending" class="order-activity">
+      该桌线上订单待顾客支付，支付完成后将自动结束会话
     </div>
     <!-- 收银主体区域 -->
     <div class="cashier-main">
@@ -66,7 +66,8 @@
     fetchUpdateSharedCartItem,
     fetchRemoveSharedCartItem,
     fetchClearSharedCart,
-    fetchSessionDetail
+    fetchSessionDetail,
+    fetchCashierMemberById
   } from '@/api/cashier'
   import { fetchPricingQuote } from '@/api/pricing'
   import { formatTime, generateUUID, normalizeOrderItemForCart } from '@utils/cashier/utils'
@@ -98,7 +99,7 @@
 
   // 当前会话订单ID（用于退菜等）
   const currentOrderId = ref<string | number | null>(null)
-  const orderActivities = ref<Array<{ key: string; text: string }>>([])
+  const onlinePending = ref(false)
 
   // 退菜弹窗显示
   const refundDishVisible = ref(false)
@@ -186,20 +187,27 @@
         | null
       if (requestId !== orderRequestId) return
       if (res && res.id) {
+        const isOnline = ['线上支付', 'ONLINE', '1'].includes(String(res.paymentMode || ''))
+        onlinePending.value = isOnline && !['已支付', '1'].includes(String(res.paymentStatus || ''))
         sessionHasOrder.value = true
-        currentOrderId.value = res.id
-        member.value = res.userId ? { id: res.userId, nickname: res.username || '会员' } : null
+        currentOrderId.value = onlinePending.value ? null : res.id
+        if (onlinePending.value) cart.commodity = []
+        if (res.userId && String(member.value?.id) !== String(res.userId)) {
+          try {
+            member.value = await fetchCashierMemberById(res.userId)
+          } catch {
+            member.value = { id: res.userId, nickname: res.username || `会员${res.userId}` }
+          }
+          if (requestId !== orderRequestId) return
+        } else if (!res.userId) {
+          member.value = null
+        }
         cart.member = member.value
         const list = res.items || []
         const unsubmitted = cart.commodity.filter((item: any) => item.fromOrder !== true)
-        cart.commodity = [...list.map(normalizeOrderItemForCart), ...unsubmitted]
-        orderActivities.value = [
-          ...(res.operatorName ? [{ key: 'created', text: `${res.operatorName} 提交订单` }] : []),
-          ...((res.dishChanges || []) as any[]).map((change) => ({
-            key: String(change.id),
-            text: `${change.operatorName || '顾客'}${change.changeType === 2 ? '退菜' : '加菜'} ${change.dishName || '菜品'} ×${change.quantity}`
-          }))
-        ].slice(0, 5)
+        cart.commodity = onlinePending.value
+          ? []
+          : [...list.map(normalizeOrderItemForCart), ...unsubmitted]
         if (list.length > 0) {
           cart.discountRate = res.discountRate ?? null
           cart.note = res.note || ''
@@ -208,9 +216,9 @@
           if (!silent) ElMessage.success('订单数据加载成功')
         }
       } else {
+        onlinePending.value = false
         sessionHasOrder.value = false
         currentOrderId.value = null
-        orderActivities.value = []
       }
     } catch (error: any) {
       if (requestId !== orderRequestId) return
@@ -218,9 +226,9 @@
       const noOrder =
         error?.response?.status === 404 || String(error?.message || '').includes('暂无订单')
       if (noOrder) {
+        onlinePending.value = false
         sessionHasOrder.value = false
         currentOrderId.value = null
-        orderActivities.value = []
       } else if (!silent) {
         ElMessage.warning('加载桌位订单失败，请稍后重试')
       }
@@ -305,6 +313,7 @@
     try {
       const lines = await fetchSharedCart(sessionNo, token)
       if (requestId !== sharedCartRequestId || props.session?.sessionNo !== sessionNo) return
+      if (onlinePending.value) return
       const submitted = cart.commodity.filter((item: any) => item.fromOrder === true)
       const existing = new Map(cart.commodity.map((item: any) => [item.cartItemId, item]))
       cart.commodity = [
@@ -322,7 +331,6 @@
           specText: line.specText || '',
           specKey: line.specText || '',
           isGift: (existing.get(line.cartItemId) as any)?.isGift || 0,
-          addedByName: line.addedByName,
           fromOrder: false
         }))
       ]
@@ -635,6 +643,7 @@
 
   // 提交订单（桌位模式）：无订单则创建订单，有订单则加菜。不打开支付弹窗。
   const handleSubmitOrder = async () => {
+    if (onlinePending.value) return ElMessage.warning('该桌线上订单待顾客支付')
     if (cart.commodity.length === 0) {
       ElMessage.error('请先添加商品')
       return
@@ -707,6 +716,7 @@
 
   // 结算：仅打开支付弹窗。桌位模式下必须先有订单（通过「提交订单」）才允许结算。
   const handleClearing = () => {
+    if (onlinePending.value) return ElMessage.warning('该桌线上订单由顾客在线支付')
     if (cart.commodity.length === 0) {
       ElMessage.error('请先添加商品')
       return
@@ -797,6 +807,7 @@
     handleRefresh,
     refreshing,
     hasOrder: sessionHasOrder,
+    onlinePending,
     submitOrderLoading,
     submitOrder: handleSubmitOrder,
     currentOrderId,

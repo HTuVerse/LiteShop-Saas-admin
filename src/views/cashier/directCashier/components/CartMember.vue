@@ -7,13 +7,19 @@
       <div class="info">
         <div class="nickname">{{ memberName }}</div>
         <div class="phone">{{ member.phone || member.cellphone || '-' }}</div>
+        <div class="member-assets">
+          <span>等级：{{ memberLevel }}</span>
+          <span>积分：{{ memberPoints }}</span>
+        </div>
         <div class="balance">余额：￥{{ formatMoney(memberBalance) }}</div>
       </div>
-      <ElButton plain size="small" @click="startEditing">更换</ElButton>
-      <ElButton type="danger" text size="small" @click="handleClear">清除</ElButton>
+      <ElButton v-if="!memberLocked" plain size="small" @click="startEditing">更换</ElButton>
+      <ElButton v-if="!memberLocked" type="danger" text size="small" @click="handleClear"
+        >清除</ElButton
+      >
     </div>
 
-    <div v-else class="member-lookup">
+    <div v-else-if="!memberLocked" class="member-lookup">
       <ElAvatar :size="40" :icon="User" />
       <ElInput
         ref="phoneInputRef"
@@ -33,7 +39,11 @@
     <div class="member-benefit">
       <ElIcon><TrophyBase /></ElIcon>
       <span>{{
-        member ? '会员权益已生效，本单可享会员优惠' : '输入手机号加载会员，可使用积分与余额'
+        member
+          ? '会员权益已生效，本单可享会员优惠'
+          : memberLocked
+            ? '首笔订单未绑定会员'
+            : '输入手机号加载会员，可使用积分与余额'
       }}</span>
     </div>
   </div>
@@ -47,6 +57,8 @@
   import { formatMoney } from '@utils/cashier/utils'
 
   const { member, updateMember } = inject<any>('member')
+  const tableInfo = inject<any>('tableInfo', null)
+  const memberLocked = computed(() => Boolean(tableInfo?.hasOrder?.value))
   const phone = ref('')
   const editing = ref(false)
   const loading = ref(false)
@@ -59,6 +71,14 @@
   const memberBalance = computed(() =>
     Number(member.value?.surplusMoney ?? member.value?.balance ?? 0)
   )
+  const memberLevel = computed(
+    () =>
+      (member.value?.levelName && member.value?.level != null
+        ? `${member.value.levelName}（编码 ${member.value.level}）`
+        : member.value?.levelName) ||
+      (member.value?.level != null ? `等级编码 ${member.value.level}` : '未设置')
+  )
+  const memberPoints = computed(() => Number(member.value?.points ?? 0))
 
   const startEditing = () => {
     phone.value = ''
@@ -141,9 +161,15 @@
   }
 
   .phone,
+  .member-assets,
   .balance {
     font-size: 12px;
     color: var(--el-text-color-secondary);
+  }
+
+  .member-assets {
+    display: flex;
+    gap: 10px;
   }
 
   .balance {

@@ -95,7 +95,7 @@
           type="primary"
           size="large"
           class="submit-order-btn"
-          :disabled="cart.commodity.length === 0"
+          :disabled="cart.commodity.length === 0 || Boolean(unref(tableInfo.onlinePending))"
           :loading="submitOrderLoading"
           @click="handleSubmitOrder"
         >
@@ -164,6 +164,7 @@
   // 桌位模式下不允许在有未提交商品时结算
   const canSettle = computed(() => {
     if (!tableInfo) return true
+    if (unref(tableInfo.onlinePending)) return false
     return tableModeHasOrder.value && !hasUnsubmittedItems.value && cart.commodity.length > 0
   })
 
@@ -177,6 +178,7 @@
 
   // 订单项行原价小计（优惠前）：有 totalPrice+discountPrice 则用，否则 price*number
   const getLineOriginalTotal = (item: any) => {
+    if (item.lineListAmount != null) return Number(item.lineListAmount)
     if (
       !item.isGift &&
       item.totalPrice != null &&
@@ -190,6 +192,7 @@
 
   // 订单项行实付小计（优惠后）：有 totalPrice 则用，否则 price*number
   const getLinePayTotal = (item: any) => {
+    if (item.linePayableAmount != null) return Number(item.linePayableAmount)
     if (item.totalPrice != null && item.totalPrice >= 0) return Number(item.totalPrice)
     return (item.price ?? 0) * (item.number ?? 0)
   }
@@ -303,8 +306,8 @@
 
   .table-info-bar {
     display: grid;
-    grid-template-columns: minmax(88px, 1.25fr) repeat(3, minmax(58px, 1fr)) 32px;
     flex-shrink: 0;
+    grid-template-columns: minmax(88px, 1.25fr) repeat(3, minmax(58px, 1fr)) 32px;
     gap: 0;
     align-items: center;
     min-height: 54px;
