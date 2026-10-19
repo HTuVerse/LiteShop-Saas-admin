@@ -4,7 +4,7 @@
     <div class="coupon-info" v-if="couponData">
       <div class="coupon-card">
         <div class="coupon-value">
-          <template v-if="getTypeNumber(couponData.type) === 1">
+          <template v-if="[1, 3].includes(getTypeNumber(couponData.type))">
             <span class="value">{{ (Number(couponData.value) * 10).toFixed(0) }}</span>
             <span class="unit">折</span>
           </template>
@@ -48,7 +48,7 @@
         >
           <template #default="{ item }">{{ item.label }}</template>
         </ElAutocomplete>
-        <div class="form-tip">只能发给当前租户的用户；用户 ID 请从用户管理中复制。</div>
+        <div class="form-tip">输入至少两个字搜索姓名、手机号或 ID；请从候选结果选择用户。</div>
       </ElFormItem>
 
       <ElFormItem label="生效时间" prop="startTime">
@@ -131,8 +131,11 @@
   const submitLoading = ref(false)
 
   async function searchUsers(keyWord: string) {
+    const term = keyWord.trim()
+    if (term.length < 2) return []
     try {
-      const page = await fetchUserRecipients(keyWord)
+      const page = await fetchUserRecipients(term)
+      if (term !== formData.userId.trim()) return []
       return page.records.map((user) => ({
         value: String(user.id),
         label: (user.nickname || user.username || '用户') + ' · ID ' + user.id

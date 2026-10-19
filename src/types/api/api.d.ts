@@ -1253,10 +1253,10 @@ declare namespace Api {
   /** 优惠券管理类型 */
   namespace Coupon {
     /** 优惠券类型枚举（请求后端传数字） */
-    type CouponType = 0 | 1 | 2 // 0-满减券, 1-整单折扣券, 2-菜品免单券
+    type CouponType = 0 | 1 | 2 | 3 // 3-菜品折扣券
 
     /** 优惠券类型描述（后端返回为文字时使用） */
-    type CouponTypeDesc = '满减券' | '整单折扣券' | '菜品免单券'
+    type CouponTypeDesc = '满减券' | '整单折扣券' | '菜品免单券' | '菜品折扣券'
 
     /** 优惠券状态枚举（用户持有的优惠券状态） */
     type CouponStatus = 0 | 1 | 2 | 3 // 0-未生效, 1-未使用, 2-已使用, 3-已过期
@@ -1302,6 +1302,12 @@ declare namespace Api {
       totalCount: number
       /** 剩余数量 */
       remainCount: number
+      /** 逗号分隔的适用门店ID；空表示全部 */
+      storeIds?: string
+      /** 逗号分隔的可用星期；空表示每天 */
+      useWeekdays?: string
+      useStartTime?: string
+      useEndTime?: string
       /** 有效期开始时间 */
       startTime?: string
       /** 有效期结束时间 */
@@ -1345,7 +1351,11 @@ declare namespace Api {
       /** 最低消费金额 */
       minAmount?: number
       /** 发放总数 */
-      totalCount: number
+      totalCount?: number
+      storeIds?: string
+      useWeekdays?: string
+      useStartTime?: string
+      useEndTime?: string
       /** 有效期开始时间 */
       startTime?: string
       /** 有效期结束时间 */

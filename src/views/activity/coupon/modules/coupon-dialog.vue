@@ -3,7 +3,7 @@
   <ElDialog
     v-model="dialogVisible"
     :title="dialogType === 'add' ? '新增优惠券' : '编辑优惠券'"
-    width="600px"
+    width="700px"
     align-center
     destroy-on-close
   >
@@ -22,23 +22,24 @@
           <ElRadio :value="0">满减券</ElRadio>
           <ElRadio :value="1">整单折扣券</ElRadio>
           <ElRadio :value="2">菜品免单券</ElRadio>
+          <ElRadio :value="3">菜品折扣券</ElRadio>
         </ElRadioGroup>
       </ElFormItem>
 
       <ElFormItem v-if="formData.type !== 2" :label="valueLabel" prop="value">
         <ElInputNumber
           v-model="formData.value"
-          :min="formData.type === 1 ? 0.01 : 0.01"
-          :max="formData.type === 1 ? 0.99 : 99999"
+          :min="[1, 3].includes(formData.type) ? 0.01 : 0.01"
+          :max="[1, 3].includes(formData.type) ? 0.99 : 99999"
           :precision="2"
-          :step="formData.type === 1 ? 0.05 : 1"
+          :step="[1, 3].includes(formData.type) ? 0.05 : 1"
           controls-position="right"
           style="width: 200px"
         />
         <span class="form-tip">{{ valueTip }}</span>
       </ElFormItem>
 
-      <ElFormItem v-if="formData.type === 2" label="可免单菜品" prop="dishIds">
+      <ElFormItem v-if="[2, 3].includes(formData.type)" :label="formData.type === 2 ? '可免单菜品' : '可折扣菜品'" prop="dishIds">
         <ElSelect
           v-model="formData.dishIds"
           multiple
@@ -47,7 +48,7 @@
           reserve-keyword
           :remote-method="searchDishOptions"
           :loading="dishLoading"
-          placeholder="输入菜品名称搜索，任选一种免一份"
+          :placeholder="formData.type === 2 ? '输入菜品名称，任选一种免一份' : '输入菜品名称，每单任选一份打折'"
           style="width: 100%"
         >
           <ElOption
@@ -57,7 +58,7 @@
             :value="String(dish.id)"
           />
         </ElSelect>
-        <span class="form-tip">订单中命中多个菜品时，自动免除其中价格最高的一份。</span>
+        <span class="form-tip">订单中命中多个菜品时，自动优惠价格最高的一份。</span>
       </ElFormItem>
 
       <ElFormItem label="最低消费" prop="minAmount">
@@ -72,7 +73,7 @@
         <span class="form-tip">元，无门槛请填 0</span>
       </ElFormItem>
 
-      <ElFormItem label="发放总数" prop="totalCount">
+      <ElFormItem v-if="dialogType === 'add'" label="发放总数" prop="totalCount">
         <ElInputNumber
           v-model="formData.totalCount"
           :min="1"
@@ -81,6 +82,35 @@
           style="width: 200px"
         />
         <span class="form-tip">张</span>
+      </ElFormItem>
+
+      <ElFormItem v-else label="剩余库存">
+        <span>{{ couponData?.remainCount ?? 0 }} 张；请在列表使用“调整库存”增减。</span>
+      </ElFormItem>
+
+      <ElFormItem label="适用门店">
+        <ElSelect v-model="formData.storeIds" multiple filterable remote reserve-keyword
+          :remote-method="searchStoreOptions" :loading="storeLoading"
+          placeholder="不选表示全部门店；输入名称搜索" style="width: 100%">
+          <ElOption v-for="store in storeOptions" :key="String(store.id)"
+            :label="store.storeName" :value="String(store.id)" />
+        </ElSelect>
+      </ElFormItem>
+
+      <ElFormItem label="可用星期">
+        <ElCheckboxGroup v-model="formData.useWeekdays">
+          <ElCheckbox v-for="day in weekdays" :key="day.value" :value="day.value" :label="day.label" />
+        </ElCheckboxGroup>
+        <span class="form-tip">不选表示每天可用</span>
+      </ElFormItem>
+
+      <ElFormItem label="每日时段">
+        <ElTimePicker v-model="formData.useStartTime" value-format="HH:mm:ss" format="HH:mm"
+          placeholder="开始时间" style="width: 145px" />
+        <span style="margin: 0 8px">至</span>
+        <ElTimePicker v-model="formData.useEndTime" value-format="HH:mm:ss" format="HH:mm"
+          placeholder="结束时间" style="width: 145px" />
+        <span class="form-tip">都不填表示全天</span>
       </ElFormItem>
 
       <ElFormItem label="有效期" prop="timeRange">
@@ -130,6 +160,9 @@
     ElRadio,
     ElDatePicker,
     ElInputNumber,
+    ElTimePicker,
+    ElCheckboxGroup,
+    ElCheckbox,
     ElSelect,
     ElOption
   } from 'element-plus'
@@ -140,6 +173,7 @@
     fetchCouponDishOptions,
     fetchCouponDishDetail
   } from '@/api/coupon-manage'
+  import { fetchGetStorePageList, fetchGetStoreDetail } from '@/api/dish-manage'
   import { getEnumNumber, CouponTypeEnumMap } from '@/utils/enum/enumConverter'
 
   interface Props {
@@ -170,7 +204,31 @@
   const submitLoading = ref(false)
   const dishLoading = ref(false)
   const dishOptions = ref<Api.Dish.DishListItem[]>([])
+  const storeLoading = ref(false)
+  const storeOptions = ref<Api.Store.StoreListItem[]>([])
+  const weekdays = [
+    { value: 1, label: '周一' }, { value: 2, label: '周二' }, { value: 3, label: '周三' },
+    { value: 4, label: '周四' }, { value: 5, label: '周五' }, { value: 6, label: '周六' },
+    { value: 7, label: '周日' }
+  ]
   let dishSearchSeq = 0
+  let storeSearchSeq = 0
+
+  const searchStoreOptions = async (keyword: string) => {
+    const seq = ++storeSearchSeq
+    if (!keyword.trim()) return
+    storeLoading.value = true
+    try {
+      const page = await fetchGetStorePageList({ currentPage: 1, pageSize: 20, storeName: keyword.trim() })
+      if (seq === storeSearchSeq) {
+        const selected = storeOptions.value.filter((store) => formData.storeIds.includes(String(store.id)))
+        storeOptions.value = [...selected, ...page.records.filter((store) =>
+          !selected.some((item) => String(item.id) === String(store.id)))]
+      }
+    } finally {
+      if (seq === storeSearchSeq) storeLoading.value = false
+    }
+  }
 
   const searchDishOptions = async (keyword: string) => {
     const seq = ++dishSearchSeq
@@ -209,6 +267,10 @@
     minAmount: 0,
     totalCount: 100,
     dishIds: [] as string[],
+    storeIds: [] as string[],
+    useWeekdays: [] as number[],
+    useStartTime: '' as string,
+    useEndTime: '' as string,
     startTime: '',
     endTime: ''
   })
@@ -219,6 +281,7 @@
       case 0:
         return '满减金额'
       case 1:
+      case 3:
         return '折扣率'
       case 2:
         return '' // 菜品免单券无需面值
@@ -232,6 +295,7 @@
       case 0:
         return '元，满足最低消费后直接减免'
       case 1:
+      case 3:
         return '，如 0.85 表示 85 折'
       case 2:
         return ''
@@ -264,7 +328,7 @@
       {
         validator: (_rule, value: string[], callback) => {
           callback(
-            formData.type !== 2 || value?.length ? undefined : new Error('请至少选择一个可免单菜品')
+            ![2, 3].includes(formData.type) || value?.length ? undefined : new Error('请至少选择一个适用菜品')
           )
         },
         trigger: 'change'
@@ -274,19 +338,20 @@
 
   // 类型改变时重置面值（与后端 0-满减 1-整单折扣 2-菜品免单 一致）
   const handleTypeChange = (type: number) => {
-    if (type === 1) {
+    if (type === 1 || type === 3) {
       formData.value = 0.9
     } else if (type === 2) {
       formData.value = 0 // 菜品免单券不使用 value
     } else {
       formData.value = 10
     }
-    if (type !== 2) formData.dishIds = []
+    if (![2, 3].includes(type)) formData.dishIds = []
   }
 
   // 初始化表单数据
   const initFormData = () => {
     dishSearchSeq++
+    storeSearchSeq++
     dishLoading.value = false
     const isEdit = props.type === 'edit' && props.couponData
     const row = props.couponData
@@ -307,6 +372,10 @@
       minAmount: isEdit ? (row?.minAmount ?? 0) : 0,
       totalCount: isEdit ? (row?.totalCount ?? 100) : 100,
       dishIds: isEdit ? (row?.dishItems || []).map((item) => String(item.dishId)) : [],
+      storeIds: isEdit ? (row?.storeIds || '').split(',').filter(Boolean) : [],
+      useWeekdays: isEdit ? (row?.useWeekdays || '').split(',').filter(Boolean).map(Number) : [],
+      useStartTime: isEdit ? row?.useStartTime || '' : '',
+      useEndTime: isEdit ? row?.useEndTime || '' : '',
       startTime: isEdit ? row?.startTime || '' : '',
       endTime: isEdit ? row?.endTime || '' : ''
     })
@@ -318,15 +387,24 @@
       timeRange.value = null
     }
     dishOptions.value = []
+    storeOptions.value = []
     if (isEdit && row?.id) {
       const editingId = row.id
       fetchGetCouponDetail(editingId)
         .then(async (detail) => {
           if (!props.visible || String(props.couponData?.id) !== String(editingId)) return
           formData.dishIds = (detail.dishItems || []).map((item) => String(item.dishId))
+          formData.storeIds = (detail.storeIds || '').split(',').filter(Boolean)
+          formData.useWeekdays = (detail.useWeekdays || '').split(',').filter(Boolean).map(Number)
+          formData.useStartTime = detail.useStartTime || ''
+          formData.useEndTime = detail.useEndTime || ''
           const loaded = await Promise.allSettled(formData.dishIds.map(fetchCouponDishDetail))
+          const loadedStores = await Promise.allSettled(formData.storeIds.map(fetchGetStoreDetail))
           if (props.visible && String(props.couponData?.id) === String(editingId)) {
             dishOptions.value = loaded.flatMap((result) =>
+              result.status === 'fulfilled' ? [result.value] : []
+            )
+            storeOptions.value = loadedStores.flatMap((result) =>
               result.status === 'fulfilled' ? [result.value] : []
             )
           }
@@ -370,8 +448,12 @@
       type: typeNum as Api.Coupon.CouponType,
       value: typeNum === 2 ? 0 : Number(formData.value),
       minAmount: formData.minAmount ?? 0,
-      totalCount: formData.totalCount,
-      dishItems: typeNum === 2 ? formData.dishIds.map((dishId) => ({ dishId })) : [],
+      totalCount: dialogType.value === 'add' ? formData.totalCount : undefined,
+      dishItems: [2, 3].includes(typeNum) ? formData.dishIds.map((dishId) => ({ dishId })) : [],
+      storeIds: formData.storeIds.join(','),
+      useWeekdays: formData.useWeekdays.join(','),
+      useStartTime: formData.useStartTime || undefined,
+      useEndTime: formData.useEndTime || undefined,
       startTime: formData.startTime || undefined,
       endTime: formData.endTime || undefined
     }
@@ -384,6 +466,11 @@
 
       const valid = await formRef.value.validate()
       if (!valid) return
+      if (!!formData.useStartTime !== !!formData.useEndTime
+        || (formData.useStartTime && formData.useStartTime >= formData.useEndTime)) {
+        ElMessage.warning('每日时段需同时填写，且结束时间应晚于开始时间')
+        return
+      }
 
       submitLoading.value = true
       const payload = buildSubmitPayload()

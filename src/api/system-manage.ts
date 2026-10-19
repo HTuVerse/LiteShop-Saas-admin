@@ -16,10 +16,10 @@ export interface UserRecipient {
   username: string
   nickname?: string
 }
-export function fetchUserRecipients(keyWord = '') {
+export function fetchUserRecipients(keyWord: string) {
   return request.get<Api.Common.PageResult<UserRecipient>>({
     url: '/user/recipients',
-    params: { keyWord, pageSize: 30 }
+    params: { keyWord, pageSize: 20 }
   })
 }
 

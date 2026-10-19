@@ -51,6 +51,7 @@
       :coupon-data="currentCouponData"
       @success="refreshData"
     />
+    <StockDialog v-model:visible="stockDialogVisible" :coupon-data="currentCouponData" @success="refreshData" />
   </div>
 </template>
 
@@ -70,6 +71,7 @@
   import CouponSearch from './modules/coupon-search.vue'
   import CouponDialog from './modules/coupon-dialog.vue'
   import SendCouponDialog from './modules/send-coupon-dialog.vue'
+  import StockDialog from './modules/stock-dialog.vue'
   import {
     fetchGetCouponList,
     fetchDeleteCoupon,
@@ -94,6 +96,7 @@
   const dialogType = ref<DialogType>('add')
   const couponDialogVisible = ref(false)
   const sendCouponDialogVisible = ref(false)
+  const stockDialogVisible = ref(false)
   const currentCouponData = ref<Partial<Api.Coupon.CouponListItem>>({})
 
   // 优惠券状态配置（支持数字和文字索引）
@@ -113,9 +116,11 @@
     0: { type: 'warning', text: '满减券' },
     1: { type: 'success', text: '整单折扣券' },
     2: { type: 'danger', text: '菜品免单券' },
+    3: { type: 'success', text: '菜品折扣券' },
     满减券: { type: 'warning', text: '满减券' },
     整单折扣券: { type: 'success', text: '整单折扣券' },
-    菜品免单券: { type: 'danger', text: '菜品免单券' }
+    菜品免单券: { type: 'danger', text: '菜品免单券' },
+    菜品折扣券: { type: 'success', text: '菜品折扣券' }
   }
 
   /**
@@ -189,7 +194,7 @@
           align: 'center',
           formatter: (row: Api.Coupon.CouponListItem) => {
             const typeNum = getTypeNumber(row.type as string | number)
-            if (typeNum === 1) {
+            if (typeNum === 1 || typeNum === 3) {
               return h(
                 'span',
                 { style: 'color: #67c23a; font-weight: bold;' },
@@ -268,7 +273,7 @@
         {
           prop: 'operation',
           label: '操作',
-          width: 220,
+          width: 260,
           fixed: 'right',
           formatter: (row: Api.Coupon.CouponListItem) => {
             const statusNum = getStatusNumber(row.status as string | number)
@@ -277,6 +282,15 @@
                 auth: 'marketing:coupon:edit',
                 type: 'edit',
                 onClick: () => showCouponDialog('edit', row)
+              }),
+              h(ArtButtonTable, {
+                auth: 'marketing:coupon:edit',
+                icon: 'ri:stack-line',
+                label: '调整库存',
+                onClick: () => {
+                  currentCouponData.value = { ...row }
+                  stockDialogVisible.value = true
+                }
               }),
               h(ArtButtonTable, {
                 auth: 'marketing:coupon:send',

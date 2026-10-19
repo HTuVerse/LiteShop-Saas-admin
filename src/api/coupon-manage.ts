@@ -95,6 +95,24 @@ export function fetchToggleCouponStatus(id: number) {
   })
 }
 
+/** 增减剩余可发库存，后端同步调整总量并记录原因。 */
+export function fetchAdjustCouponStock(data: { couponId: number; delta: number; reason: string }) {
+  return request.put<Api.Coupon.CouponListItem>({ url: '/coupon/stock', data })
+}
+
+/** 读取库存调整记录。 */
+export function fetchCouponStockAdjustments(couponId: number, currentPage = 1, pageSize = 10) {
+  return request.get<Api.Common.PageResult<{
+    id: string
+    delta: number
+    beforeCount: number
+    afterCount: number
+    operatorId: string
+    reason: string
+    createTime: string
+  }>>({ url: '/coupon/stock/adjustments', params: { couponId, currentPage, pageSize } })
+}
+
 // ============ 用户优惠券 API ============
 
 /**
