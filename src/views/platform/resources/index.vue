@@ -203,9 +203,6 @@
                 </ArtTable>
               </div>
             </section>
-            <p class="drop-hint"
-              >可将文件拖入列表区域上传，访问权限由顶部“公开上传 / 私有上传”决定。</p
-            >
           </div>
 
           <aside class="detail-panel" aria-label="文件详情">
@@ -520,12 +517,18 @@
                 h(
                   ElDropdown,
                   {
-                    trigger: 'click',
+                    trigger: 'hover',
                     placement: 'bottom-end',
                     onCommand: (command: string) => fileCommand(command, row)
                   },
                   {
-                    default: () => h(ArtButtonTable, { type: 'more', label: '文件操作' }),
+                    default: () =>
+                      h(ArtButtonTable, {
+                        type: 'more',
+                        label: '文件操作',
+                        buttonBgColor: 'var(--el-color-primary-light-9)',
+                        iconColor: 'var(--el-color-primary)'
+                      }),
                     dropdown: () =>
                       h(ElDropdownMenu, null, {
                         default: () => [
@@ -866,7 +869,7 @@
 
   .resource-layout {
     display: grid;
-    grid-template-columns: 176px minmax(0, 1fr);
+    grid-template-columns: 196px minmax(0, 1fr);
     min-height: 100%;
     overflow: hidden;
     background: var(--el-bg-color);
@@ -1101,7 +1104,7 @@
 
   .content-layout {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 220px;
+    grid-template-columns: minmax(0, 1fr) 250px;
     min-height: 0;
   }
 
@@ -1317,13 +1320,6 @@
     max-height: 68vh;
   }
 
-  .drop-hint {
-    padding: 0 20px 15px;
-    margin: 0;
-    font-size: 12px;
-    color: var(--el-text-color-placeholder);
-  }
-
   .usage-hint {
     font-size: 12px;
     color: var(--el-text-color-secondary);
@@ -1331,7 +1327,7 @@
 
   @media (width <= 1400px) {
     .content-layout {
-      grid-template-columns: minmax(0, 1fr) 200px;
+      grid-template-columns: minmax(0, 1fr) 228px;
     }
   }
 
