@@ -38,6 +38,28 @@
         <span class="form-tip">{{ valueTip }}</span>
       </ElFormItem>
 
+      <ElFormItem v-if="formData.type === 2" label="可免单菜品" prop="dishIds">
+        <ElSelect
+          v-model="formData.dishIds"
+          multiple
+          filterable
+          remote
+          reserve-keyword
+          :remote-method="searchDishOptions"
+          :loading="dishLoading"
+          placeholder="输入菜品名称搜索，任选一种免一份"
+          style="width: 100%"
+        >
+          <ElOption
+            v-for="dish in dishOptions"
+            :key="String(dish.id)"
+            :label="dish.dishName"
+            :value="String(dish.id)"
+          />
+        </ElSelect>
+        <span class="form-tip">订单中命中多个菜品时，自动免除其中价格最高的一份。</span>
+      </ElFormItem>
+
       <ElFormItem label="最低消费" prop="minAmount">
         <ElInputNumber
           v-model="formData.minAmount"
@@ -107,10 +129,18 @@
     ElRadioGroup,
     ElRadio,
     ElDatePicker,
-    ElInputNumber
+    ElInputNumber,
+    ElSelect,
+    ElOption
   } from 'element-plus'
-  import { fetchUpdateCoupon, fetchAddCoupon } from '@/api/coupon-manage'
-  import { CouponEnumConverter, getEnumNumber, CouponTypeEnumMap } from '@/utils/enum/enumConverter'
+  import {
+    fetchUpdateCoupon,
+    fetchAddCoupon,
+    fetchGetCouponDetail,
+    fetchCouponDishOptions,
+    fetchCouponDishDetail
+  } from '@/api/coupon-manage'
+  import { getEnumNumber, CouponTypeEnumMap } from '@/utils/enum/enumConverter'
 
   interface Props {
     visible: boolean
@@ -138,6 +168,33 @@
   // 表单实例
   const formRef = ref<FormInstance>()
   const submitLoading = ref(false)
+  const dishLoading = ref(false)
+  const dishOptions = ref<Api.Dish.DishListItem[]>([])
+  let dishSearchSeq = 0
+
+  const searchDishOptions = async (keyword: string) => {
+    const seq = ++dishSearchSeq
+    if (!keyword.trim()) return
+    dishLoading.value = true
+    try {
+      const page = await fetchCouponDishOptions(keyword.trim())
+      if (seq === dishSearchSeq) {
+        const selected = dishOptions.value.filter((dish) =>
+          formData.dishIds.includes(String(dish.id))
+        )
+        dishOptions.value = [
+          ...selected,
+          ...page.records.filter(
+            (dish) => !selected.some((item) => String(item.id) === String(dish.id))
+          )
+        ]
+      }
+    } catch (error) {
+      console.error('搜索菜品失败', error)
+    } finally {
+      if (seq === dishSearchSeq) dishLoading.value = false
+    }
+  }
 
   // 时间范围
   const timeRange = ref<[string, string] | null>(null)
@@ -151,6 +208,7 @@
     value: 10,
     minAmount: 0,
     totalCount: 100,
+    dishIds: [] as string[],
     startTime: '',
     endTime: ''
   })
@@ -201,7 +259,17 @@
         trigger: 'blur'
       }
     ],
-    totalCount: [{ required: true, message: '请输入发放总数', trigger: 'blur' }]
+    totalCount: [{ required: true, message: '请输入发放总数', trigger: 'blur' }],
+    dishIds: [
+      {
+        validator: (_rule, value: string[], callback) => {
+          callback(
+            formData.type !== 2 || value?.length ? undefined : new Error('请至少选择一个可免单菜品')
+          )
+        },
+        trigger: 'change'
+      }
+    ]
   }
 
   // 类型改变时重置面值（与后端 0-满减 1-整单折扣 2-菜品免单 一致）
@@ -213,10 +281,13 @@
     } else {
       formData.value = 10
     }
+    if (type !== 2) formData.dishIds = []
   }
 
   // 初始化表单数据
   const initFormData = () => {
+    dishSearchSeq++
+    dishLoading.value = false
     const isEdit = props.type === 'edit' && props.couponData
     const row = props.couponData
 
@@ -232,9 +303,10 @@
       name: isEdit ? row?.name || '' : '',
       description: isEdit ? row?.description || '' : '',
       type: typeValue,
-      value: isEdit ? row?.value ?? 10 : 10,
-      minAmount: isEdit ? row?.minAmount ?? 0 : 0,
-      totalCount: isEdit ? row?.totalCount ?? 100 : 100,
+      value: isEdit ? (row?.value ?? 10) : 10,
+      minAmount: isEdit ? (row?.minAmount ?? 0) : 0,
+      totalCount: isEdit ? (row?.totalCount ?? 100) : 100,
+      dishIds: isEdit ? (row?.dishItems || []).map((item) => String(item.dishId)) : [],
       startTime: isEdit ? row?.startTime || '' : '',
       endTime: isEdit ? row?.endTime || '' : ''
     })
@@ -244,6 +316,22 @@
       timeRange.value = [row.startTime, row.endTime]
     } else {
       timeRange.value = null
+    }
+    dishOptions.value = []
+    if (isEdit && row?.id) {
+      const editingId = row.id
+      fetchGetCouponDetail(editingId)
+        .then(async (detail) => {
+          if (!props.visible || String(props.couponData?.id) !== String(editingId)) return
+          formData.dishIds = (detail.dishItems || []).map((item) => String(item.dishId))
+          const loaded = await Promise.allSettled(formData.dishIds.map(fetchCouponDishDetail))
+          if (props.visible && String(props.couponData?.id) === String(editingId)) {
+            dishOptions.value = loaded.flatMap((result) =>
+              result.status === 'fulfilled' ? [result.value] : []
+            )
+          }
+        })
+        .catch((error) => console.error('读取优惠券菜品失败', error))
     }
   }
 
@@ -283,6 +371,7 @@
       value: typeNum === 2 ? 0 : Number(formData.value),
       minAmount: formData.minAmount ?? 0,
       totalCount: formData.totalCount,
+      dishItems: typeNum === 2 ? formData.dishIds.map((dishId) => ({ dishId })) : [],
       startTime: formData.startTime || undefined,
       endTime: formData.endTime || undefined
     }

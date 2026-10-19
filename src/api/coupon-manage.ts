@@ -31,6 +31,19 @@ export function fetchGetCouponDetail(id: number) {
   })
 }
 
+/** 按名称分页搜索可关联菜品。 */
+export function fetchCouponDishOptions(dishName: string) {
+  return request.get<Api.Common.PageResult<Api.Dish.DishListItem>>({
+    url: '/dish/pageList',
+    params: { currentPage: 1, pageSize: 20, dishName }
+  })
+}
+
+/** 编辑券时回显已关联菜品名称。 */
+export function fetchCouponDishDetail(id: string) {
+  return request.get<Api.Dish.DishListItem>({ url: `/dish/detail/${id}` })
+}
+
 /**
  * 创建优惠券
  * @param data 优惠券数据

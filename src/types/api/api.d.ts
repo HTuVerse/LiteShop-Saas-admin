@@ -1280,7 +1280,7 @@ declare namespace Api {
     interface CouponDishItem {
       id?: number
       couponId?: number
-      dishId: number
+      dishId: string | number
       createdAt?: string
     }
 
