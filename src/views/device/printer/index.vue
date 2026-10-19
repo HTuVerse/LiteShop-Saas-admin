@@ -913,8 +913,9 @@
 
   .preview-section {
     display: flex;
-    flex: 1;
+    flex: 0 0 420px;
     flex-direction: column;
+    min-width: 0;
     padding-left: 24px;
     overflow: hidden; // 防止预览区撑开弹窗
     border-left: 1px solid #e4e7ed;

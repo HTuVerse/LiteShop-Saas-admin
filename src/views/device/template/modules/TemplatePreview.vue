@@ -81,6 +81,9 @@
     flex-direction: column;
     align-items: center;
     gap: 12px;
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
     max-height: calc(100vh - 200px);
     padding: 20px;
     overflow: auto;
@@ -90,18 +93,20 @@
   .preview-paper {
     flex-shrink: 0;
     box-sizing: border-box;
+    max-width: 100%;
     padding: 16px;
+    overflow-x: auto;
     color: #000;
     background: #fff;
     box-shadow: 0 2px 8px rgb(0 0 0 / 10%);
   }
 
   .paper-58mm {
-    width: 220px;
+    width: 250px;
   }
 
   .paper-80mm {
-    width: 300px;
+    width: 350px;
   }
 
   .preview-caption,
@@ -114,9 +119,8 @@
   .print-content {
     margin: 0;
     white-space: pre;
-    overflow-wrap: anywhere;
     font-family: 'Courier New', monospace;
-    font-size: 12px;
+    font-size: 10.5px;
     line-height: 1.5;
   }
 
