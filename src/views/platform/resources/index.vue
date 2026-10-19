@@ -104,7 +104,7 @@
 
         <div class="content-layout">
           <div class="file-area">
-            <ArtForm class="search-form" inline @submit.prevent="search">
+            <ArtForm class="search-form" inline size="small" @submit.prevent="search">
               <ElFormItem class="keyword-field"
                 ><ElInput
                   v-model="filters.keyword"
@@ -168,59 +168,40 @@
                 />
               </div>
 
-              <ArtTable
-                row-key="id"
-                :data="rows"
-                :columns="columns"
-                :loading="loading"
-                :pagination="pagination"
-                @selection-change="(items: ResourceFile[]) => (selected = items)"
-                @row-click="selectFile"
-                @pagination:size-change="handleSizeChange"
-                @pagination:current-change="handleCurrentChange"
-              >
-                <template #resourceName="{ row }">
-                  <div class="file-name-cell">
-                    <ElImage
-                      v-if="isImage(row) && row.url && row.visibility !== 'PRIVATE'"
-                      :src="row.url"
-                      fit="cover"
-                      class="thumbnail"
-                      @click.stop="preview(row)"
-                    />
-                    <div v-else class="file-icon">
-                      <img :src="fileIcon(row)" alt="" />
+              <div class="table-frame">
+                <ArtTable
+                  row-key="id"
+                  :data="rows"
+                  :columns="columns"
+                  :loading="loading"
+                  :pagination="pagination"
+                  :pagination-options="{ size: 'small' }"
+                  :show-table-header="false"
+                  size="small"
+                  @selection-change="(items: ResourceFile[]) => (selected = items)"
+                  @row-click="selectFile"
+                  @pagination:size-change="handleSizeChange"
+                  @pagination:current-change="handleCurrentChange"
+                >
+                  <template #resourceName="{ row }">
+                    <div class="file-name-cell">
+                      <ElImage
+                        v-if="isImage(row) && row.url && row.visibility !== 'PRIVATE'"
+                        :src="row.url"
+                        fit="cover"
+                        class="thumbnail"
+                        @click.stop="preview(row)"
+                      />
+                      <div v-else class="file-icon">
+                        <img :src="fileIcon(row)" alt="" />
+                      </div>
+                      <button class="name-button" @click.stop="selectFile(row)">{{
+                        row.originalFileName
+                      }}</button>
                     </div>
-                    <button class="name-button" @click.stop="selectFile(row)">{{
-                      row.originalFileName
-                    }}</button>
-                  </div>
-                </template>
-                <template #resourceActions="{ row }">
-                  <ElDropdown
-                    trigger="hover"
-                    @command="(command: string) => fileCommand(command, row)"
-                  >
-                    <ElButton text aria-label="文件操作" @click.stop>
-                      <ArtSvgIcon icon="ri:more-2-fill" />
-                    </ElButton>
-                    <template #dropdown>
-                      <ElDropdownMenu>
-                        <ElDropdownItem command="preview">预览</ElDropdownItem>
-                        <ElDropdownItem command="download">下载</ElDropdownItem>
-                        <ElDropdownItem command="usage">查看引用</ElDropdownItem>
-                        <ElDropdownItem v-if="row.visibility !== 'PRIVATE'" command="copy"
-                          >复制链接</ElDropdownItem
-                        >
-                        <ElDropdownItem command="rename">重命名</ElDropdownItem>
-                        <ElDropdownItem command="move">移动到文件夹</ElDropdownItem>
-                        <ElDropdownItem command="visibility">切换公开/私有</ElDropdownItem>
-                        <ElDropdownItem divided command="delete">删除</ElDropdownItem>
-                      </ElDropdownMenu>
-                    </template>
-                  </ElDropdown>
-                </template>
-              </ArtTable>
+                  </template>
+                </ArtTable>
+              </div>
             </section>
             <p class="drop-hint"
               >可将文件拖入列表区域上传，访问权限由顶部“公开上传 / 私有上传”决定。</p
@@ -343,10 +324,11 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, onMounted, reactive, ref, watch } from 'vue'
-  import { ElMessage, ElMessageBox } from 'element-plus'
+  import { computed, h, onMounted, reactive, ref, watch } from 'vue'
+  import { ElDropdown, ElDropdownItem, ElDropdownMenu, ElMessage, ElMessageBox } from 'element-plus'
   import { Search } from '@element-plus/icons-vue'
   import { useTable } from '@/hooks/core/useTable'
+  import ArtButtonTable from '@/components/core/forms/art-button-table/index.vue'
   import PlatformServicesConfig from '@/views/config/website/modules/platform-services-config.vue'
   import folderBlueIcon from '@/assets/images/resource-library/folder-blue.png'
   import folderGoldIcon from '@/assets/images/resource-library/folder-gold.png'
@@ -510,6 +492,12 @@
           formatter: (row: ResourceFile) => (row.visibility === 'PRIVATE' ? '私有' : '公开')
         },
         {
+          prop: 'uploaderId',
+          label: '上传者 ID',
+          width: 100,
+          formatter: (row: ResourceFile) => row.uploaderId || '未知'
+        },
+        {
           prop: 'createdAt',
           label: '上传时间',
           width: 150,
@@ -518,10 +506,45 @@
         {
           prop: 'operation',
           label: '操作',
-          width: 66,
+          width: 60,
           fixed: 'right',
-          useSlot: true,
-          slotName: 'resourceActions'
+          align: 'center',
+          formatter: (row: ResourceFile) =>
+            h(
+              'div',
+              {
+                style: { display: 'flex', justifyContent: 'center' },
+                onClick: (event: MouseEvent) => event.stopPropagation()
+              },
+              [
+                h(
+                  ElDropdown,
+                  {
+                    trigger: 'click',
+                    placement: 'bottom-end',
+                    onCommand: (command: string) => fileCommand(command, row)
+                  },
+                  {
+                    default: () => h(ArtButtonTable, { type: 'more', label: '文件操作' }),
+                    dropdown: () =>
+                      h(ElDropdownMenu, null, {
+                        default: () => [
+                          h(ElDropdownItem, { command: 'preview' }, () => '预览'),
+                          h(ElDropdownItem, { command: 'download' }, () => '下载'),
+                          h(ElDropdownItem, { command: 'usage' }, () => '查看引用'),
+                          ...(row.visibility === 'PRIVATE'
+                            ? []
+                            : [h(ElDropdownItem, { command: 'copy' }, () => '复制链接')]),
+                          h(ElDropdownItem, { command: 'rename' }, () => '重命名'),
+                          h(ElDropdownItem, { command: 'move' }, () => '移动到文件夹'),
+                          h(ElDropdownItem, { command: 'visibility' }, () => '切换公开/私有'),
+                          h(ElDropdownItem, { command: 'delete', divided: true }, () => '删除')
+                        ]
+                      })
+                  }
+                )
+              ]
+            )
         }
       ]
     }
@@ -843,7 +866,7 @@
 
   .resource-layout {
     display: grid;
-    grid-template-columns: 210px minmax(0, 1fr);
+    grid-template-columns: 176px minmax(0, 1fr);
     min-height: 100%;
     overflow: hidden;
     background: var(--el-bg-color);
@@ -853,7 +876,7 @@
 
   .folder-panel {
     min-width: 0;
-    padding: 20px 12px;
+    padding: 14px 9px;
     border-right: 1px solid var(--el-border-color-light);
   }
 
@@ -861,8 +884,8 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0 8px 18px;
-    font-size: 15px;
+    padding: 0 8px 12px;
+    font-size: 14px;
     font-weight: 700;
     color: var(--el-text-color-primary);
   }
@@ -908,8 +931,8 @@
     gap: 9px;
     align-items: center;
     min-width: 0;
-    padding: 10px;
-    font-size: 13px;
+    padding: 7px;
+    font-size: 12px;
     color: var(--el-text-color-regular);
     text-align: left;
     cursor: pointer;
@@ -958,8 +981,8 @@
     gap: 12px;
     align-items: center;
     justify-content: space-between;
-    min-height: 72px;
-    padding: 14px 20px;
+    min-height: 56px;
+    padding: 9px 14px;
     overflow-x: auto;
     border-bottom: 1px solid var(--el-border-color-lighter);
   }
@@ -1031,16 +1054,19 @@
   }
 
   .search-form {
-    padding: 14px 16px;
+    padding: 10px 12px;
     margin: 0;
+    overflow-x: auto;
     border-bottom: 1px solid var(--el-border-color-lighter);
   }
 
   .search-form :deep(.el-form) {
     display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
+    flex-wrap: nowrap;
+    gap: 6px;
     align-items: center;
+    width: max-content;
+    min-width: 100%;
   }
 
   .search-form :deep(.el-form-item) {
@@ -1053,12 +1079,12 @@
   }
 
   .keyword-field {
-    flex: 1 1 175px;
-    min-width: 150px;
+    flex: 0 0 190px;
   }
 
   .filter-field {
-    flex: 0 0 112px;
+    flex: 0 0 118px;
+    min-width: 118px;
   }
 
   .filter-field :deep(.el-select) {
@@ -1066,7 +1092,7 @@
   }
 
   .id-field {
-    flex: 0 0 120px;
+    flex: 0 0 104px;
   }
 
   .expand-button :deep(.art-svg-icon) {
@@ -1075,8 +1101,8 @@
 
   .content-layout {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 260px;
-    min-height: 550px;
+    grid-template-columns: minmax(0, 1fr) 220px;
+    min-height: 0;
   }
 
   .file-area {
@@ -1085,7 +1111,7 @@
 
   .files-panel {
     min-width: 0;
-    padding: 12px 16px 20px;
+    padding: 8px 12px 12px;
   }
 
   .batch-toolbar {
@@ -1093,8 +1119,13 @@
     gap: 10px;
     align-items: center;
     justify-content: space-between;
-    min-height: 42px;
-    margin-bottom: 10px;
+    min-height: 36px;
+    margin-bottom: 6px;
+  }
+
+  .table-frame {
+    height: clamp(330px, calc(100vh - 360px), 590px);
+    min-height: 0;
   }
 
   .batch-actions {
@@ -1133,8 +1164,8 @@
   .thumbnail,
   .file-icon {
     flex: none;
-    width: 36px;
-    height: 36px;
+    width: 30px;
+    height: 30px;
     border-radius: 6px;
   }
 
@@ -1149,8 +1180,8 @@
   }
 
   .file-icon img {
-    width: 36px;
-    height: 36px;
+    width: 30px;
+    height: 30px;
     object-fit: contain;
   }
 
@@ -1175,8 +1206,8 @@
     align-self: stretch;
     min-width: 0;
     min-height: 0;
-    max-height: calc(100vh - 180px);
-    padding: 16px;
+    max-height: calc(100vh - 155px);
+    padding: 12px;
     overflow: hidden;
     border-left: 1px solid var(--el-border-color-lighter);
   }
@@ -1185,7 +1216,7 @@
     display: grid;
     flex: none;
     place-items: center;
-    height: 160px;
+    height: 125px;
     overflow: hidden;
     cursor: pointer;
     background: var(--el-fill-color-light);
@@ -1198,17 +1229,17 @@
   }
 
   .detail-file-icon {
-    width: 132px;
-    height: 132px;
+    width: 105px;
+    height: 105px;
     object-fit: contain;
   }
 
   .detail-section {
     flex: 1;
     min-height: 0;
-    padding-top: 16px;
+    padding-top: 12px;
     padding-right: 4px;
-    margin-top: 18px;
+    margin-top: 12px;
     overflow-y: auto;
     border-top: 1px solid var(--el-border-color-lighter);
   }
@@ -1300,7 +1331,7 @@
 
   @media (width <= 1400px) {
     .content-layout {
-      grid-template-columns: minmax(0, 1fr) 230px;
+      grid-template-columns: minmax(0, 1fr) 200px;
     }
   }
 
