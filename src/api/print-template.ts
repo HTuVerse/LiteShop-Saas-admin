@@ -12,6 +12,7 @@ export function getTemplatePage(params: {
   storeId?: Id
   printerId?: number
   enabled?: number
+  printScene?: 'ORDER' | 'ADD_ITEMS'
 }) {
   return request.get({
     url: '/printTemplateApi/page',

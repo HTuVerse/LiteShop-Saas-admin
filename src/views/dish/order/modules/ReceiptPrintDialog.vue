@@ -105,7 +105,8 @@
       templateList.value = Array.isArray(list)
         ? list.filter(
             (template) =>
-              template.storeId == null || String(template.storeId) === String(props.storeId)
+              (template.printScene == null || template.printScene === 'ORDER') &&
+              (template.storeId == null || String(template.storeId) === String(props.storeId))
           )
         : []
     } catch {
