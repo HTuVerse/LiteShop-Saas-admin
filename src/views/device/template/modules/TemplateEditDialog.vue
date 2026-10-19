@@ -78,10 +78,20 @@
                 <ElSwitch v-model="formData.showLogo" :active-value="1" :inactive-value="0" />
               </ElFormItem>
 
-              <ElFormItem v-if="formData.showLogo === 1" label="Logo URL" prop="logoUrl">
-                <ElInput v-model="formData.logoUrl" placeholder="请输入Logo图片URL"
-                  @input="formData.logoResourceId = undefined" />
-                <ElButton v-if="userStore.isSuperAdmin" @click="pickerVisible = true">从资源库选择</ElButton>
+              <ElFormItem v-if="formData.showLogo === 1" label="设备预置Logo">
+                <div>
+                  <ElText type="info" size="small">
+                    飞鹅小票机只打印已写入设备的 Logo。资源库图片 URL
+                    无法直接打印，请先为每台打印机上传图片。
+                  </ElText>
+                  <ElLink
+                    href="https://help1.feieyun.com/docs/H78QVu"
+                    target="_blank"
+                    type="primary"
+                  >
+                    查看飞鹅设置方法
+                  </ElLink>
+                </div>
               </ElFormItem>
 
               <ElFormItem label="店铺名称样式" prop="storeNameStyle">
@@ -127,7 +137,7 @@
               <ElFormItem label="取餐码突出显示">
                 <ElSwitch v-model="formData.showPickupCode" :active-value="1" :inactive-value="0" />
                 <ElText type="info" size="small" class="ml-2">
-                  叫号自取订单会在完整小票中突出取餐码
+                  叫号自取订单会突出取餐码，订单信息中不再重复打印
                 </ElText>
               </ElFormItem>
 
@@ -144,6 +154,25 @@
               </ElFormItem>
             </ElTabPane>
 
+            <!-- 用户信息 -->
+            <ElTabPane label="用户信息" name="customer">
+              <ElFormItem label="用户字段">
+                <ElCheckboxGroup v-model="selectedCustomerFields">
+                  <ElCheckbox value="customerName">用户名</ElCheckbox>
+                  <ElCheckbox value="customerPhone">用户电话</ElCheckbox>
+                </ElCheckboxGroup>
+              </ElFormItem>
+              <ElFormItem
+                v-if="selectedCustomerFields.includes('customerPhone')"
+                label="电话中间四位"
+              >
+                <ElSwitch v-model="maskCustomerPhone" active-text="显示为 ****" />
+              </ElFormItem>
+              <ElText type="info" size="small"
+                >仅关联会员的订单显示用户信息，未填写的字段自动跳过。</ElText
+              >
+            </ElTabPane>
+
             <!-- 菜品信息 -->
             <ElTabPane label="菜品信息" name="dish">
               <ElFormItem label="菜品列表样式" prop="dishListStyle">
@@ -154,11 +183,21 @@
               </ElFormItem>
 
               <ElFormItem label="显示菜品规格">
-                <ElSwitch v-model="formData.showDishSpec" :active-value="1" :inactive-value="0" :disabled="formData.dishListStyle === 0" />
+                <ElSwitch
+                  v-model="formData.showDishSpec"
+                  :active-value="1"
+                  :inactive-value="0"
+                  :disabled="formData.dishListStyle === 0"
+                />
               </ElFormItem>
 
               <ElFormItem label="显示菜品备注">
-                <ElSwitch v-model="formData.showDishNote" :active-value="1" :inactive-value="0" :disabled="formData.dishListStyle === 0" />
+                <ElSwitch
+                  v-model="formData.showDishNote"
+                  :active-value="1"
+                  :inactive-value="0"
+                  :disabled="formData.dishListStyle === 0"
+                />
               </ElFormItem>
             </ElTabPane>
 
@@ -186,7 +225,6 @@
                   示例：http://yourdomain.com/order/{orderNo}
                 </ElText>
               </ElFormItem>
-
             </ElTabPane>
           </ElTabs>
         </ArtForm>
@@ -215,8 +253,6 @@
         <TemplatePreview :template-data="previewTemplateData" />
       </div>
     </div>
-
-    <ResourcePicker v-if="userStore.isSuperAdmin" v-model="pickerVisible" @select="selectResource" />
 
     <template #footer>
       <ElButton @click="handleClose">取消</ElButton>
@@ -304,9 +340,6 @@
   import { convertPrinterToNumber, convertTemplateToNumber } from '../../utils/enumConverter'
   import { useManagedStores } from '../../composables/useManagedStores'
   import type { Id } from '@/types/backend'
-  import ResourcePicker from '@/components/business/ResourcePicker.vue'
-  import type { ResourceFile } from '@/api/resource-library'
-  import { useUserStore } from '@/store/modules/user'
 
   defineOptions({ name: 'TemplateEditDialog' })
 
@@ -330,20 +363,19 @@
   })
 
   const activeTab = ref('basic')
-  const userStore = useUserStore()
-  const pickerVisible = ref(false)
-  function selectResource(file: ResourceFile) {
-    if (!file.url) return
-    formData.logoUrl = file.url
-    formData.logoResourceId = file.id
-  }
   const formRef = ref()
   const submitLoading = ref(false)
   const selectedOrderFields = ref<string[]>([])
+  const selectedCustomerFields = ref<string[]>([])
+  const maskCustomerPhone = ref(true)
   const defaultOrderFields = ['orderNo', 'tableName', 'orderType', 'createdAt']
   const supportedOrderFields = new Set([
-    ...defaultOrderFields, 'diningCount', 'pickupMode', 'pickupCode'
+    ...defaultOrderFields,
+    'diningCount',
+    'pickupMode',
+    'pickupCode'
   ])
+  const supportedCustomerFields = new Set(['customerName', 'customerPhone'])
   const showPrinterDialog = ref(false)
   const selectedPrinterId = ref<number | undefined>(undefined)
   const printerList = ref<any[]>([])
@@ -430,8 +462,19 @@
                     typeof field === 'string' && supportedOrderFields.has(field)
                 )
               : [...defaultOrderFields]
+            selectedCustomerFields.value = Array.isArray(fields)
+              ? fields.filter(
+                  (field: unknown): field is string =>
+                    typeof field === 'string' && supportedCustomerFields.has(field)
+                )
+              : []
+            maskCustomerPhone.value =
+              Array.isArray(fields) &&
+              (!fields.includes('customerPhone') || fields.includes('maskCustomerPhone'))
           } catch {
             selectedOrderFields.value = [...defaultOrderFields]
+            selectedCustomerFields.value = []
+            maskCustomerPhone.value = true
           }
         }
       }
@@ -450,9 +493,15 @@
 
   // 监听订单字段选择变化
   watch(
-    selectedOrderFields,
-    (newVal) => {
-      formData.orderInfoFields = JSON.stringify(newVal)
+    [selectedOrderFields, selectedCustomerFields, maskCustomerPhone],
+    () => {
+      formData.orderInfoFields = JSON.stringify([
+        ...selectedOrderFields.value,
+        ...selectedCustomerFields.value,
+        ...(selectedCustomerFields.value.includes('customerPhone') && maskCustomerPhone.value
+          ? ['maskCustomerPhone']
+          : [])
+      ])
     },
     { deep: true }
   )
@@ -492,6 +541,8 @@
       remark: ''
     })
     selectedOrderFields.value = [...defaultOrderFields]
+    selectedCustomerFields.value = []
+    maskCustomerPhone.value = true
     activeTab.value = 'basic'
   }
 

@@ -2,7 +2,9 @@
   <div class="template-preview">
     <ElAlert v-if="error" :title="error" type="error" :closable="false" show-icon />
     <div class="preview-paper" :class="templateData.paperWidth === 1 ? 'paper-80mm' : 'paper-58mm'">
-      <div class="preview-caption">演示订单 · 正式打印内容 · {{ templateData.printCopies || 1 }} 联</div>
+      <div class="preview-caption"
+        >演示订单 · 正式打印内容 · {{ templateData.printCopies || 1 }} 联</div
+      >
       <div v-if="loading && !content" class="preview-state">正在生成预览…</div>
       <div v-else-if="content" class="print-content" v-html="renderedContent"></div>
       <div v-else-if="!error" class="preview-state">暂无可预览的小票内容</div>
@@ -32,7 +34,7 @@
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
-      .replace(/&lt;IMG&gt;(.*?)&lt;\/IMG&gt;/g, '<span class="media">【图片：$1】</span>')
+      .replace(/&lt;LOGO&gt;/g, '<span class="media">【设备预置 Logo】</span>')
       .replace(/&lt;QR&gt;(.*?)&lt;\/QR&gt;/g, '<span class="media">【二维码：$1】</span>')
       .replace(/&lt;BR&gt;/g, '<br>')
       .replace(/&lt;CB&gt;/g, '<span class="center enlarged">')
