@@ -75,17 +75,15 @@
             class="status-card"
             :class="[
               `is-${option.theme}`,
-              {
-                'is-selected': selectedStatus === option.value,
-                'is-current': option.label === order.status
-              }
+              { 'is-selected': selectedStatus === option.value, 'is-current': option.value === currentStatusValue }
             ]"
             type="button"
             role="radio"
             :aria-checked="selectedStatus === option.value"
+            :disabled="option.value === currentStatusValue"
             @click="selectedStatus = option.value"
           >
-            <span v-if="option.label === order.status" class="current-badge">当前</span>
+            <span v-if="option.value === currentStatusValue" class="current-badge">当前</span>
             <span class="check-indicator">
               <ElIcon v-if="selectedStatus === option.value"><Check /></ElIcon>
             </span>
@@ -101,7 +99,7 @@
       <section class="remark-section">
         <label for="order-status-remark">
           备注说明
-          <span>（可选）</span>
+          <span>{{ selectedStatus === OrderStatusCode.CANCELLED ? '（必填）' : '（可选）' }}</span>
         </label>
         <ElInput
           id="order-status-remark"
@@ -111,7 +109,11 @@
           maxlength="200"
           show-word-limit
           resize="none"
-          placeholder="请输入备注信息..."
+          :placeholder="
+            selectedStatus === OrderStatusCode.CANCELLED
+              ? '取消订单时必须填写原因'
+              : '请输入备注信息...'
+          "
         />
       </section>
     </div>
@@ -145,12 +147,18 @@
   import preparedIllustration from '@/assets/images/system/order-status-prepared.png'
   import completedIllustration from '@/assets/images/system/order-status-completed.png'
   import cancelledIllustration from '@/assets/images/system/order-status-cancelled.png'
+  import {
+    getOrderStatusCode,
+    ORDER_STATUS_DEFINITIONS,
+    OrderStatusCode,
+    type OrderStatusLabel
+  } from '@/utils/constants/order'
 
   type OrderListItem = Api.Order.OrderDetailVO
 
   interface StatusOption {
-    label: Api.Order.OrderStatus
-    value: number
+    label: OrderStatusLabel
+    value: OrderStatusCode
     description: string
     theme: 'blue' | 'cyan' | 'orange' | 'green' | 'purple' | 'red'
     illustration: string
@@ -172,62 +180,39 @@
     set: (value) => emit('update:visible', value)
   })
 
-  const statusOptions: StatusOption[] = [
-    {
-      label: '已下单',
-      value: 1,
-      description: '订单已提交\n等待商家处理',
-      theme: 'blue',
-      illustration: placedIllustration
-    },
-    {
-      label: '已接单',
-      value: 2,
-      description: '商家已接单\n等待开始制作',
-      theme: 'cyan',
-      illustration: acceptedIllustration
-    },
-    {
-      label: '制作中',
-      value: 3,
-      description: '厨房正在\n制作菜品',
-      theme: 'orange',
-      illustration: cookingIllustration
-    },
-    {
-      label: '制作完成',
-      value: 4,
-      description: '菜品制作完成\n可取餐／上桌',
-      theme: 'green',
-      illustration: preparedIllustration
-    },
-    {
-      label: '已完成',
-      value: 5,
-      description: '顾客已取餐\n订单已完成',
-      theme: 'purple',
-      illustration: completedIllustration
-    },
-    {
-      label: '已取消',
-      value: 6,
-      description: '订单已取消\n不再继续处理',
-      theme: 'red',
-      illustration: cancelledIllustration
-    }
-  ]
+  const optionPresentation: Record<
+    OrderStatusCode,
+    Pick<StatusOption, 'theme' | 'illustration'>
+  > = {
+    [OrderStatusCode.PLACED]: { theme: 'blue', illustration: placedIllustration },
+    [OrderStatusCode.ACCEPTED]: { theme: 'cyan', illustration: acceptedIllustration },
+    [OrderStatusCode.PREPARING]: { theme: 'orange', illustration: cookingIllustration },
+    [OrderStatusCode.PREPARED]: { theme: 'green', illustration: preparedIllustration },
+    [OrderStatusCode.COMPLETED]: { theme: 'purple', illustration: completedIllustration },
+    [OrderStatusCode.CANCELLED]: { theme: 'red', illustration: cancelledIllustration }
+  }
+
+  const statusOptions = computed<StatusOption[]>(() => {
+    return ORDER_STATUS_DEFINITIONS.map((item) => ({
+      label: item.label,
+      value: item.code,
+      description: item.description,
+      ...optionPresentation[item.code]
+    }))
+  })
 
   const selectedStatus = ref<number>()
   const remark = ref('')
 
-  const currentStatusValue = computed(
-    () => statusOptions.find((option) => option.label === props.order?.status)?.value
+  const currentStatusValue = computed(() =>
+    getOrderStatusCode(props.order?.status as OrderStatusLabel | undefined)
   )
 
   const canSubmit = computed(
     () =>
       Boolean(props.order && selectedStatus.value) &&
       selectedStatus.value !== currentStatusValue.value &&
+      (selectedStatus.value !== OrderStatusCode.CANCELLED || Boolean(remark.value.trim())) &&
       !props.loading
   )
 
@@ -247,7 +232,7 @@
   })
 
   const resetForm = () => {
-    selectedStatus.value = currentStatusValue.value
+    selectedStatus.value = undefined
     remark.value = ''
   }
 
@@ -263,7 +248,9 @@
 
   const submitStatus = () => {
     if (!canSubmit.value || !selectedStatus.value) return
-    const selectedOption = statusOptions.find((option) => option.value === selectedStatus.value)
+    const selectedOption = statusOptions.value.find(
+      (option) => option.value === selectedStatus.value
+    )
     if (!selectedOption) return
     emit('confirm', {
       status: selectedOption.value,
@@ -488,6 +475,12 @@
 
     &:focus-visible {
       box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+    }
+
+    &:disabled {
+      cursor: default;
+      opacity: 0.6;
+      transform: none;
     }
 
     &.is-selected {

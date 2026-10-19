@@ -351,7 +351,8 @@
                       icon: 'ri:refresh-line',
                       iconColor: '#67c23a',
                       buttonBgColor: '#f0f9ff',
-                      onClick: () => updateStatus(row)
+                      onClick: () => updateStatus(row),
+                      disabled: row.status === '已取消' || row.status === '已完成'
                     })
                 }
               ),
