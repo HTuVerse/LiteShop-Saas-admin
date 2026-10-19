@@ -1,5 +1,5 @@
 <template>
-  <div class="resource-page art-full-height">
+  <div class="resource-page">
     <div class="resource-layout">
       <aside class="folder-panel">
         <div class="folder-heading">
@@ -177,6 +177,9 @@
                   :pagination="pagination"
                   :pagination-options="{ size: 'small' }"
                   :show-table-header="false"
+                  height="auto"
+                  max-height="clamp(280px, calc(100vh - 360px), 590px)"
+                  empty-height="220px"
                   size="small"
                   @selection-change="(items: ResourceFile[]) => (selected = items)"
                   @row-click="selectFile"
@@ -870,7 +873,7 @@
   .resource-layout {
     display: grid;
     grid-template-columns: 196px minmax(0, 1fr);
-    min-height: 100%;
+    min-height: 0;
     overflow: hidden;
     background: var(--el-bg-color);
     border: 1px solid var(--el-border-color-light);
@@ -1127,8 +1130,11 @@
   }
 
   .table-frame {
-    height: clamp(330px, calc(100vh - 360px), 590px);
     min-height: 0;
+  }
+
+  .table-frame :deep(.art-table) {
+    height: auto !important;
   }
 
   .batch-actions {
