@@ -6,7 +6,7 @@ import type { Id } from '@/types/backend'
  */
 
 // 添加打印机
-export function addPrinter(data: any) {
+export function addPrinter(data: Api.Device.PrinterFormParams & { printerKey: string }) {
   return request.post({
     url: '/feieyunApi/printer/add',
     data,
@@ -38,7 +38,7 @@ export function getPrinterPage(params: {
 }
 
 // 根据门店ID查询打印机列表
-export function getPrinterListByStore(storeId: number) {
+export function getPrinterListByStore(storeId: Id) {
   return request.get({
     url: `/feieyunApi/printer/listByStore/${storeId}`,
     showErrorMessage: true
@@ -54,7 +54,7 @@ export function getPrinterBySn(sn: string) {
 }
 
 // 更新打印机信息
-export function updatePrinter(data: any) {
+export function updatePrinter(data: Api.Device.PrinterFormParams) {
   return request.put({
     url: '/feieyunApi/printer/update',
     data,

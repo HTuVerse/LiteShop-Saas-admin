@@ -38,6 +38,15 @@ export function getDefaultTemplate() {
   })
 }
 
+// 用正式小票生成器预览当前未保存的模板草稿
+export function previewTemplate(data: any): Promise<string> {
+  return request.post({
+    url: '/printTemplateApi/preview',
+    data,
+    showErrorMessage: false
+  })
+}
+
 // 创建打印模板
 export function createTemplate(data: any) {
   return request.post({

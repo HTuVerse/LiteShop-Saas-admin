@@ -72,12 +72,8 @@
                 :disabled="dialogType === 'edit'"
               />
             </ElFormItem>
-            <ElFormItem label="识别码" prop="printerKey">
-              <ElInput
-                v-model="formData.printerKey"
-                placeholder="请输入打印机识别码"
-                :disabled="dialogType === 'edit'"
-              />
+            <ElFormItem v-if="dialogType === 'add'" label="识别码" prop="printerKey">
+              <ElInput v-model="formData.printerKey" placeholder="请输入打印机识别码" />
             </ElFormItem>
             <ElFormItem label="备注名称" prop="remark">
               <ElInput v-model="formData.remark" placeholder="请输入备注名称" />
@@ -149,7 +145,7 @@
                       <ElTag v-if="template.isDefault === 1" type="success" size="small">
                         默认
                       </ElTag>
-                      <ElTag size="small">{{ template.paperWidth }}</ElTag>
+                      <ElTag size="small">{{ template.paperWidth === 1 ? '80mm' : '58mm' }}</ElTag>
                     </div>
                   </div>
                 </ElOption>
@@ -208,7 +204,7 @@
           {{ selectedTemplateData.templateName }}
         </ElDescriptionsItem>
         <ElDescriptionsItem label="纸张宽度">
-          {{ selectedTemplateData.paperWidth }}
+          {{ selectedTemplateData.paperWidth === 1 ? '80mm' : '58mm' }}
         </ElDescriptionsItem>
         <ElDescriptionsItem label="字体大小">
           {{ ['正常', '中号', '大号'][selectedTemplateData.fontSize || 0] }}
@@ -290,6 +286,7 @@
     queryOrderInfoByDate
   } from '@/api/printer'
   import { getTemplatePage, getTemplateById } from '@/api/print-template'
+  import { testPrint } from '@/api/order-print'
   import TemplatePreview from '../template/modules/TemplatePreview.vue'
   import PrinterSearch from './components/printer-search.vue'
   import { convertPrinterToNumber, StatusTextMap, getEnumNumber } from '../utils/enumConverter'
@@ -298,6 +295,7 @@
   import type { FormRules } from 'element-plus'
 
   const statusLoading = ref(false)
+  const testingPrinterId = ref<Id>()
   defineOptions({ name: 'PrinterManage' })
 
   // 搜索表单
@@ -358,7 +356,16 @@
       }
     ],
     sn: [{ required: true, message: '请输入打印机编号', trigger: 'blur' }],
-    printerKey: [{ required: true, message: '请输入打印机识别码', trigger: 'blur' }]
+    printerKey: [
+      {
+        trigger: 'blur',
+        validator: (_rule, value, callback) => {
+          if (dialogType.value === 'add' && !String(value || '').trim())
+            callback(new Error('请输入打印机识别码'))
+          else callback()
+        }
+      }
+    ]
   }
 
   // 订单统计相关
@@ -528,7 +535,7 @@
         {
           prop: 'operation',
           label: '操作',
-          width: 200,
+          width: 240,
           fixed: 'right',
           formatter: (row: any) =>
             h(
@@ -536,6 +543,15 @@
               { wrap: true },
               {
                 default: () => [
+                  h(ArtButtonTable, {
+                    auth: 'restaurant:printer:print',
+                    label: '试打绑定模板',
+                    icon: 'ri:printer-line',
+                    iconColor: '#409eff',
+                    buttonBgColor: '#ecf5ff',
+                    disabled: testingPrinterId.value === row.id,
+                    onClick: () => handleTestPrint(row)
+                  }),
                   h(ArtButtonTable, {
                     icon: 'ri:refresh-line',
                     iconColor: '#67c23a',
@@ -682,6 +698,8 @@
       // 编辑时需要转换文字枚举为数字枚举
       const convertedRow = convertPrinterToNumber(row)
       Object.assign(formData, convertedRow)
+      // printerKey 是只写字段，查询不会返回；编辑时保持为空且绝不回传。
+      formData.printerKey = ''
       formData.storeId = resolveStoreId(row.storeId)
 
       // 如果有模板ID，加载模板详情
@@ -721,10 +739,9 @@
       await formRef.value?.validate()
 
       // 准备提交数据：只提交必要字段
-      const submitData = {
+      const submitData: Api.Device.PrinterFormParams = {
         id: formData.id,
         sn: formData.sn,
-        printerKey: formData.printerKey,
         remark: formData.remark,
         cardNum: formData.cardNum,
         storeId: formData.storeId,
@@ -734,7 +751,7 @@
       }
 
       if (dialogType.value === 'add') {
-        await addPrinter(submitData)
+        await addPrinter({ ...submitData, printerKey: formData.printerKey.trim() })
         ElMessage.success('添加成功')
         refreshCreate()
       } else {
@@ -766,6 +783,20 @@
       .catch(() => {
         ElMessage.info('已取消删除')
       })
+  }
+
+  // 使用打印机绑定模板或门店默认模板生成演示订单小票。
+  const handleTestPrint = async (row: any) => {
+    if (testingPrinterId.value != null) return
+    testingPrinterId.value = row.id
+    try {
+      const result: any = await testPrint({ printerId: row.id })
+      ElMessage.success(result?.msg || '模板演示小票已提交，请检查打印机是否出纸')
+    } catch (error) {
+      console.error('测试打印失败', error)
+    } finally {
+      testingPrinterId.value = undefined
+    }
   }
 
   // 刷新打印机状态

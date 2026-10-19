@@ -26,7 +26,7 @@
       <ElFormItem label="打印模板">
         <ElSelect
           v-model="form.templateId"
-          placeholder="不选则使用默认模板"
+          placeholder="不选则优先使用打印机绑定模板"
           clearable
           style="width: 100%"
         >
@@ -63,8 +63,8 @@
   const props = withDefaults(
     defineProps<{
       visible: boolean
-      orderId: number | null
-      storeId?: number | null
+      orderId: string | number | null
+      storeId?: string | number | null
       title?: string
     }>(),
     { title: '小票打印', storeId: null }
@@ -92,7 +92,7 @@
     if (!props.storeId) return
     try {
       const res = await getPrinterListByStore(props.storeId)
-      printerList.value = Array.isArray(res) ? res : (res as any)?.data ?? res?.list ?? []
+      printerList.value = Array.isArray(res) ? res : ((res as any)?.data ?? res?.list ?? [])
     } catch {
       printerList.value = []
     }
@@ -100,9 +100,14 @@
 
   const loadTemplates = async () => {
     try {
-      const res = await getTemplatePage({ currentPage: 1, pageSize: 50 })
+      const res = await getTemplatePage({ currentPage: 1, pageSize: 100, enabled: 1 })
       const list = (res as any)?.records ?? (res as any)?.data?.records ?? (res as any)?.list ?? []
-      templateList.value = Array.isArray(list) ? list : []
+      templateList.value = Array.isArray(list)
+        ? list.filter(
+            (template) =>
+              template.storeId == null || String(template.storeId) === String(props.storeId)
+          )
+        : []
     } catch {
       templateList.value = []
     }
@@ -127,17 +132,16 @@
     }
     printing.value = true
     try {
-      printOrder({
+      await printOrder({
         orderId,
         printerId: form.value.printerId,
         templateId: form.value.templateId
-      }).then((res) => {
-        if (res != null) {
-          ElMessage.success('打印成功')
-        }
       })
+      ElMessage.success('打印任务已提交，请等待打印机出纸')
       emit('success')
       dialogVisible.value = false
+    } catch (error) {
+      console.error('提交打印任务失败', error)
     } finally {
       printing.value = false
     }

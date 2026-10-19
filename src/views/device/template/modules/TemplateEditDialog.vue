@@ -45,21 +45,9 @@
 
               <ElFormItem label="纸张宽度" prop="paperWidth">
                 <ElRadioGroup v-model="formData.paperWidth">
-                  <ElRadio value="58mm">58mm</ElRadio>
-                  <ElRadio value="80mm">80mm</ElRadio>
+                  <ElRadio :value="0">58mm</ElRadio>
+                  <ElRadio :value="1">80mm</ElRadio>
                 </ElRadioGroup>
-              </ElFormItem>
-
-              <ElFormItem label="字体大小" prop="fontSize">
-                <ElRadioGroup v-model="formData.fontSize">
-                  <ElRadio :value="0">正常</ElRadio>
-                  <ElRadio :value="1">中号</ElRadio>
-                  <ElRadio :value="2">大号</ElRadio>
-                </ElRadioGroup>
-              </ElFormItem>
-
-              <ElFormItem label="打印浓度" prop="printDensity">
-                <ElSlider v-model="formData.printDensity" :min="1" :max="15" show-input />
               </ElFormItem>
 
               <ElFormItem label="打印联数" prop="printCopies">
@@ -83,7 +71,9 @@
               </ElFormItem>
 
               <ElFormItem v-if="formData.showLogo === 1" label="Logo URL" prop="logoUrl">
-                <ElInput v-model="formData.logoUrl" placeholder="请输入Logo图片URL" />
+                <ElInput v-model="formData.logoUrl" placeholder="请输入Logo图片URL"
+                  @input="formData.logoResourceId = undefined" />
+                <ElButton v-if="userStore.isSuperAdmin" @click="pickerVisible = true">从资源库选择</ElButton>
               </ElFormItem>
 
               <ElFormItem label="店铺名称样式" prop="storeNameStyle">
@@ -119,9 +109,9 @@
                   <ElCheckbox value="orderNo">订单号</ElCheckbox>
                   <ElCheckbox value="tableName">桌台名称</ElCheckbox>
                   <ElCheckbox value="orderType">订单类型</ElCheckbox>
-                  <ElCheckbox value="customerName">顾客姓名</ElCheckbox>
-                  <ElCheckbox value="customerPhone">顾客电话</ElCheckbox>
                   <ElCheckbox value="diningCount">就餐人数</ElCheckbox>
+                  <ElCheckbox value="pickupMode">取餐方式</ElCheckbox>
+                  <ElCheckbox value="pickupCode">取餐码</ElCheckbox>
                   <ElCheckbox value="createdAt">下单时间</ElCheckbox>
                 </ElCheckboxGroup>
               </ElFormItem>
@@ -129,7 +119,7 @@
               <ElFormItem label="取餐码突出显示">
                 <ElSwitch v-model="formData.showPickupCode" :active-value="1" :inactive-value="0" />
                 <ElText type="info" size="small" class="ml-2">
-                  开启后将使用取餐码为重心的打印布局
+                  叫号自取订单会在完整小票中突出取餐码
                 </ElText>
               </ElFormItem>
 
@@ -137,7 +127,7 @@
                 <ElSwitch v-model="formData.showOrderNote" :active-value="1" :inactive-value="0" />
               </ElFormItem>
 
-              <ElFormItem label="显示支付信息">
+              <ElFormItem label="显示支付方式、状态与时间">
                 <ElSwitch
                   v-model="formData.showPaymentInfo"
                   :active-value="1"
@@ -155,17 +145,12 @@
                 </ElRadioGroup>
               </ElFormItem>
 
-              <ElFormItem label="显示菜品图片">
-                <ElSwitch v-model="formData.showDishImage" :active-value="1" :inactive-value="0" />
-                <ElText type="info" size="small" class="ml-2"> 显示图片会影响打印速度 </ElText>
-              </ElFormItem>
-
               <ElFormItem label="显示菜品规格">
-                <ElSwitch v-model="formData.showDishSpec" :active-value="1" :inactive-value="0" />
+                <ElSwitch v-model="formData.showDishSpec" :active-value="1" :inactive-value="0" :disabled="formData.dishListStyle === 0" />
               </ElFormItem>
 
               <ElFormItem label="显示菜品备注">
-                <ElSwitch v-model="formData.showDishNote" :active-value="1" :inactive-value="0" />
+                <ElSwitch v-model="formData.showDishNote" :active-value="1" :inactive-value="0" :disabled="formData.dishListStyle === 0" />
               </ElFormItem>
             </ElTabPane>
 
@@ -194,13 +179,6 @@
                 </ElText>
               </ElFormItem>
 
-              <ElFormItem v-if="formData.showQrcode === 1" label="二维码大小" prop="qrcodeSize">
-                <ElRadioGroup v-model="formData.qrcodeSize">
-                  <ElRadio :value="1">小</ElRadio>
-                  <ElRadio :value="2">中</ElRadio>
-                  <ElRadio :value="3">大</ElRadio>
-                </ElRadioGroup>
-              </ElFormItem>
             </ElTabPane>
           </ElTabs>
         </ArtForm>
@@ -219,17 +197,18 @@
             ]"
             size="small"
             @click="handleTestPrint"
-            :disabled="!formData.id"
           >
             <template #icon>
               <Icon icon="ri:printer-line" />
             </template>
-            测试打印
+            打印当前模板草稿
           </ElButton>
         </div>
         <TemplatePreview :template-data="formData" />
       </div>
     </div>
+
+    <ResourcePicker v-if="userStore.isSuperAdmin" v-model="pickerVisible" @select="selectResource" />
 
     <template #footer>
       <ElButton @click="handleClose">取消</ElButton>
@@ -310,6 +289,9 @@
   import { convertPrinterToNumber, convertTemplateToNumber } from '../../utils/enumConverter'
   import { useManagedStores } from '../../composables/useManagedStores'
   import type { Id } from '@/types/backend'
+  import ResourcePicker from '@/components/business/ResourcePicker.vue'
+  import type { ResourceFile } from '@/api/resource-library'
+  import { useUserStore } from '@/store/modules/user'
 
   defineOptions({ name: 'TemplateEditDialog' })
 
@@ -333,9 +315,20 @@
   })
 
   const activeTab = ref('basic')
+  const userStore = useUserStore()
+  const pickerVisible = ref(false)
+  function selectResource(file: ResourceFile) {
+    if (!file.url) return
+    formData.logoUrl = file.url
+    formData.logoResourceId = file.id
+  }
   const formRef = ref()
   const submitLoading = ref(false)
   const selectedOrderFields = ref<string[]>([])
+  const defaultOrderFields = ['orderNo', 'tableName', 'orderType', 'createdAt']
+  const supportedOrderFields = new Set([
+    ...defaultOrderFields, 'diningCount', 'pickupMode', 'pickupCode'
+  ])
   const showPrinterDialog = ref(false)
   const selectedPrinterId = ref<number | undefined>(undefined)
   const printerList = ref<any[]>([])
@@ -353,14 +346,15 @@
     id: undefined as number | undefined,
     templateName: '',
     storeId: undefined as string | undefined,
-    paperWidth: '80mm',
+    paperWidth: 1,
     showLogo: 0,
     logoUrl: '',
+    logoResourceId: undefined as string | undefined,
     storeNameStyle: 2,
     showAddress: 1,
     showPhone: 1,
     showBusinessHours: 0,
-    orderInfoFields: '',
+    orderInfoFields: JSON.stringify(defaultOrderFields),
     dishListStyle: 1,
     showDishImage: 0,
     showDishSpec: 1,
@@ -405,9 +399,15 @@
         // 解析订单字段
         if (newVal.orderInfoFields) {
           try {
-            selectedOrderFields.value = JSON.parse(newVal.orderInfoFields)
-          } catch (e) {
-            selectedOrderFields.value = []
+            const fields = JSON.parse(newVal.orderInfoFields)
+            selectedOrderFields.value = Array.isArray(fields)
+              ? fields.filter(
+                  (field: unknown): field is string =>
+                    typeof field === 'string' && supportedOrderFields.has(field)
+                )
+              : [...defaultOrderFields]
+          } catch {
+            selectedOrderFields.value = [...defaultOrderFields]
           }
         }
       }
@@ -439,14 +439,15 @@
       id: undefined,
       templateName: '',
       storeId: undefined,
-      paperWidth: '80mm',
+      paperWidth: 1,
       showLogo: 0,
       logoUrl: '',
+      logoResourceId: undefined,
       storeNameStyle: 2,
       showAddress: 1,
       showPhone: 1,
       showBusinessHours: 0,
-      orderInfoFields: '',
+      orderInfoFields: JSON.stringify(defaultOrderFields),
       dishListStyle: 1,
       showDishImage: 0,
       showDishSpec: 1,
@@ -465,7 +466,7 @@
       enabled: 1,
       remark: ''
     })
-    selectedOrderFields.value = []
+    selectedOrderFields.value = [...defaultOrderFields]
     activeTab.value = 'basic'
   }
 
@@ -509,17 +510,12 @@
 
   // 测试打印
   const handleTestPrint = async () => {
-    if (!formData.id) {
-      ElMessage.warning('请先保存模板后再测试打印')
-      return
-    }
-
     try {
       // 获取可用的打印机列表
       const printerResult: any = await getPrinterPage({
         currentPage: 1,
         pageSize: 100,
-        storeId: props.templateData?.storeId ?? undefined,
+        storeId: formData.storeId ?? undefined,
         status: undefined
       })
 
@@ -550,9 +546,9 @@
     try {
       await testPrint({
         printerId: selectedPrinterId.value,
-        templateId: formData.id!
+        template: { ...formData }
       })
-      ElMessage.success('测试打印指令已发送')
+      ElMessage.success('当前模板草稿已提交打印，请检查小票内容')
       showPrinterDialog.value = false
     } catch (error: any) {
       console.error('测试打印失败', error)
