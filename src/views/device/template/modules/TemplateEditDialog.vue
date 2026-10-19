@@ -175,11 +175,16 @@
 
             <!-- 菜品信息 -->
             <ElTabPane label="菜品信息" name="dish">
-              <ElFormItem label="菜品列表样式" prop="dishListStyle">
-                <ElRadioGroup v-model="formData.dishListStyle">
-                  <ElRadio :value="0">简约(仅名称、数量、价格)</ElRadio>
-                  <ElRadio :value="1">详细(含规格、备注)</ElRadio>
-                </ElRadioGroup>
+              <ElFormItem label="显示菜品单价">
+                <ElSwitch v-model="formData.showDishUnitPrice" :active-value="1" :inactive-value="0" />
+              </ElFormItem>
+
+              <ElFormItem label="显示菜品数量">
+                <ElSwitch v-model="formData.showDishQuantity" :active-value="1" :inactive-value="0" />
+              </ElFormItem>
+
+              <ElFormItem label="显示菜品金额">
+                <ElSwitch v-model="formData.showDishAmount" :active-value="1" :inactive-value="0" />
               </ElFormItem>
 
               <ElFormItem label="显示菜品规格">
@@ -187,8 +192,16 @@
                   v-model="formData.showDishSpec"
                   :active-value="1"
                   :inactive-value="0"
-                  :disabled="formData.dishListStyle === 0"
                 />
+              </ElFormItem>
+
+              <ElFormItem label="显示原价">
+                <ElSwitch v-model="formData.showDishOriginalPrice" :active-value="1" :inactive-value="0" />
+              </ElFormItem>
+
+              <ElFormItem label="显示优惠价">
+                <ElSwitch v-model="formData.showDishDiscountPrice" :active-value="1" :inactive-value="0" />
+                <ElText type="info" size="small" class="ml-2">仅优惠菜品显示该行原价与优惠后金额</ElText>
               </ElFormItem>
 
               <ElFormItem label="显示菜品备注">
@@ -196,7 +209,6 @@
                   v-model="formData.showDishNote"
                   :active-value="1"
                   :inactive-value="0"
-                  :disabled="formData.dishListStyle === 0"
                 />
               </ElFormItem>
             </ElTabPane>
@@ -410,9 +422,13 @@
     showPhone: 1,
     showBusinessHours: 0,
     orderInfoFields: JSON.stringify(defaultOrderFields),
-    dishListStyle: 1,
     showDishImage: 0,
+    showDishUnitPrice: 1,
+    showDishQuantity: 1,
+    showDishAmount: 1,
     showDishSpec: 1,
+    showDishOriginalPrice: 1,
+    showDishDiscountPrice: 1,
     showDishNote: 1,
     showOrderNote: 1,
     showPaymentInfo: 1,
@@ -522,9 +538,13 @@
       showPhone: 1,
       showBusinessHours: 0,
       orderInfoFields: JSON.stringify(defaultOrderFields),
-      dishListStyle: 1,
       showDishImage: 0,
+      showDishUnitPrice: 1,
+      showDishQuantity: 1,
+      showDishAmount: 1,
       showDishSpec: 1,
+      showDishOriginalPrice: 1,
+      showDishDiscountPrice: 1,
       showDishNote: 1,
       showOrderNote: 1,
       showPaymentInfo: 1,
