@@ -25,6 +25,14 @@
                 <ElInput v-model="formData.templateName" placeholder="请输入模板名称" />
               </ElFormItem>
 
+              <ElFormItem label="打印用途" prop="printScene">
+                <ElRadioGroup v-model="formData.printScene">
+                  <ElRadio value="ORDER">提交订单</ElRadio>
+                  <ElRadio value="ADD_ITEMS">加菜</ElRadio>
+                </ElRadioGroup>
+                <ElText type="info" size="small" class="ml-2">加菜单只打印本次新增菜品</ElText>
+              </ElFormItem>
+
               <ElFormItem label="所属门店" prop="storeId">
                 <ElSelect
                   v-model="formData.storeId"
@@ -204,7 +212,7 @@
             打印当前模板草稿
           </ElButton>
         </div>
-        <TemplatePreview :template-data="formData" />
+        <TemplatePreview :template-data="previewTemplateData" />
       </div>
     </div>
 
@@ -254,10 +262,17 @@
               >
                 {{ printer.status === 1 ? '在线' : '离线' }}
               </ElTag>
+              <ElTag size="small">{{ printer.paperWidth === 1 ? '80mm' : '58mm' }}</ElTag>
             </div>
           </ElOption>
         </ElSelect>
       </ElFormItem>
+      <ElAlert
+        v-if="selectedPrinter && (selectedPrinter.paperWidth ?? 0) !== formData.paperWidth"
+        title="该打印机实际纸宽与模板不同，试打会按打印机纸宽重新排版"
+        type="warning"
+        :closable="false"
+      />
     </ArtForm>
 
     <template #footer>
@@ -332,6 +347,13 @@
   const showPrinterDialog = ref(false)
   const selectedPrinterId = ref<number | undefined>(undefined)
   const printerList = ref<any[]>([])
+  const selectedPrinter = computed(() =>
+    printerList.value.find((printer) => String(printer.id) === String(selectedPrinterId.value))
+  )
+  const previewTemplateData = computed(() => ({
+    ...formData,
+    paperWidth: selectedPrinter.value?.paperWidth ?? formData.paperWidth
+  }))
   const {
     storeOptions,
     storesLoading,
@@ -345,8 +367,9 @@
   const formData = reactive({
     id: undefined as number | undefined,
     templateName: '',
+    printScene: 'ORDER',
     storeId: undefined as string | undefined,
-    paperWidth: 1,
+    paperWidth: 0,
     showLogo: 0,
     logoUrl: '',
     logoResourceId: undefined as string | undefined,
@@ -377,6 +400,7 @@
   const formRules = {
     storeId: storeRules,
     templateName: [{ required: true, message: '请输入模板名称', trigger: 'blur' }],
+    printScene: [{ required: true, message: '请选择打印用途', trigger: 'change' }],
     paperWidth: [{ required: true, message: '请选择纸张宽度', trigger: 'change' }]
   }
 
@@ -438,8 +462,9 @@
     Object.assign(formData, {
       id: undefined,
       templateName: '',
+      printScene: 'ORDER',
       storeId: undefined,
-      paperWidth: 1,
+      paperWidth: 0,
       showLogo: 0,
       logoUrl: '',
       logoResourceId: undefined,

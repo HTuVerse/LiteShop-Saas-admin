@@ -117,6 +117,12 @@
                 <ElRadio :value="2">标签机</ElRadio>
               </ElRadioGroup>
             </ElFormItem>
+            <ElFormItem label="实际纸张宽度" prop="paperWidth">
+              <ElRadioGroup v-model="formData.paperWidth">
+                <ElRadio :value="0">58mm</ElRadio>
+                <ElRadio :value="1">80mm</ElRadio>
+              </ElRadioGroup>
+            </ElFormItem>
             <ElFormItem label="默认打印模板" prop="templateId">
               <ElSelect
                 v-model="formData.templateId"
@@ -178,7 +184,13 @@
             </ElButton>
           </div>
           <div v-if="selectedTemplateData" class="preview-wrapper">
-            <TemplatePreview :template-data="selectedTemplateData" />
+            <ElAlert
+              v-if="selectedTemplateData.paperWidth !== formData.paperWidth"
+              title="模板纸宽与设备不同，实际打印按设备纸宽排版"
+              type="warning"
+              :closable="false"
+            />
+            <TemplatePreview :template-data="effectivePreviewTemplate" />
           </div>
           <ElEmpty v-else description="请选择打印模板以查看预览" :image-size="120" />
         </div>
@@ -203,14 +215,11 @@
         <ElDescriptionsItem label="模板名称">
           {{ selectedTemplateData.templateName }}
         </ElDescriptionsItem>
-        <ElDescriptionsItem label="纸张宽度">
+        <ElDescriptionsItem label="模板纸宽">
           {{ selectedTemplateData.paperWidth === 1 ? '80mm' : '58mm' }}
         </ElDescriptionsItem>
-        <ElDescriptionsItem label="字体大小">
-          {{ ['正常', '中号', '大号'][selectedTemplateData.fontSize || 0] }}
-        </ElDescriptionsItem>
-        <ElDescriptionsItem label="打印浓度">
-          {{ selectedTemplateData.printDensity || 8 }}
+        <ElDescriptionsItem label="实际打印纸宽">
+          {{ formData.paperWidth === 1 ? '80mm' : '58mm' }}
         </ElDescriptionsItem>
         <ElDescriptionsItem label="打印联数">
           {{ selectedTemplateData.printCopies || 1 }}
@@ -327,6 +336,11 @@
     () => dialogType.value === 'edit' && originalTemplateId.value != null
   )
   const selectedTemplateData = ref<any>(null)
+  const effectivePreviewTemplate = computed(() =>
+    selectedTemplateData.value
+      ? { ...selectedTemplateData.value, paperWidth: formData.paperWidth }
+      : null
+  )
   const templateDetailVisible = ref(false)
   const formData = reactive({
     id: undefined as number | undefined,
@@ -337,12 +351,14 @@
     storeId: undefined as string | undefined,
     printerBrand: undefined as number | undefined,
     printerType: 1,
+    paperWidth: 0,
     templateId: undefined as number | undefined
   })
 
   // 表单验证规则
   const formRules: FormRules = {
     storeId: storeRules,
+    paperWidth: [{ required: true, message: '请选择打印机实际纸张宽度', trigger: 'change' }],
     templateId: [
       {
         trigger: 'change',
@@ -511,6 +527,12 @@
           }
         },
         {
+          prop: 'paperWidth',
+          label: '实际纸宽',
+          width: 100,
+          formatter: (row: any) => row.paperWidth === 1 ? '80mm' : '58mm'
+        },
+        {
           prop: 'status',
           label: '在线状态',
           width: 100,
@@ -621,7 +643,9 @@
   const availableTemplates = computed(() =>
     formData.storeId
       ? templateList.value.filter(
-          (template) => template.storeId == null || String(template.storeId) === formData.storeId
+          (template) =>
+            (template.printScene == null || template.printScene === 'ORDER') &&
+            (template.storeId == null || String(template.storeId) === formData.storeId)
         )
       : []
   )
@@ -698,6 +722,7 @@
       // 编辑时需要转换文字枚举为数字枚举
       const convertedRow = convertPrinterToNumber(row)
       Object.assign(formData, convertedRow)
+      formData.paperWidth = row.paperWidth ?? 0
       // printerKey 是只写字段，查询不会返回；编辑时保持为空且绝不回传。
       formData.printerKey = ''
       formData.storeId = resolveStoreId(row.storeId)
@@ -722,6 +747,7 @@
         storeId: resolveStoreId(searchForm.storeId) ?? defaultStoreId.value,
         printerBrand: undefined,
         printerType: 1,
+        paperWidth: 0,
         templateId: undefined
       })
       selectedTemplateData.value = null
@@ -739,7 +765,7 @@
       await formRef.value?.validate()
 
       // 准备提交数据：只提交必要字段
-      const submitData: Api.Device.PrinterFormParams = {
+      const submitData: Api.Device.PrinterFormParams & { paperWidth: number } = {
         id: formData.id,
         sn: formData.sn,
         remark: formData.remark,
@@ -747,6 +773,7 @@
         storeId: formData.storeId,
         printerBrand: formData.printerBrand,
         printerType: formData.printerType,
+        paperWidth: formData.paperWidth,
         templateId: formData.templateId
       }
 

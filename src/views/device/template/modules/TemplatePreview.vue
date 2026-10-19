@@ -35,13 +35,17 @@
       .replace(/&lt;IMG&gt;(.*?)&lt;\/IMG&gt;/g, '<span class="media">【图片：$1】</span>')
       .replace(/&lt;QR&gt;(.*?)&lt;\/QR&gt;/g, '<span class="media">【二维码：$1】</span>')
       .replace(/&lt;BR&gt;/g, '<br>')
-      .replace(/&lt;(CB|C)&gt;/g, '<span class="center">')
-      .replace(/&lt;\/(CB|C)&gt;/g, '</span>')
+      .replace(/&lt;CB&gt;/g, '<span class="center enlarged">')
+      .replace(/&lt;\/CB&gt;/g, '</span>')
+      .replace(/&lt;C&gt;/g, '<span class="center">')
+      .replace(/&lt;\/C&gt;/g, '</span>')
       .replace(/&lt;RIGHT&gt;/g, '<span class="right">')
       .replace(/&lt;\/RIGHT&gt;/g, '</span>')
-      .replace(/&lt;B&gt;/g, '<strong>')
-      .replace(/&lt;\/B&gt;/g, '</strong>')
-      .replace(/&lt;L&gt;/g, '<span class="large">')
+      .replace(/&lt;BOLD&gt;/g, '<strong>')
+      .replace(/&lt;\/BOLD&gt;/g, '</strong>')
+      .replace(/&lt;B&gt;/g, '<span class="enlarged">')
+      .replace(/&lt;\/B&gt;/g, '</span>')
+      .replace(/&lt;L&gt;/g, '<span class="tall">')
       .replace(/&lt;\/L&gt;/g, '</span>')
   )
 
@@ -136,8 +140,13 @@
     text-align: right;
   }
 
-  .print-content :deep(.large) {
-    font-size: 1.35em;
+  .print-content :deep(.enlarged) {
+    font-size: 1.8em;
+  }
+
+  .print-content :deep(.tall) {
+    display: inline-block;
+    transform: scaleY(1.5);
   }
 
   .print-content :deep(.media) {
