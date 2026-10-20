@@ -259,7 +259,7 @@
 
   // 表单数据
   const formData = reactive({
-    id: undefined as number | undefined,
+    id: undefined as string | number | undefined,
     name: '',
     description: '',
     type: 0 as Api.Coupon.CouponType,

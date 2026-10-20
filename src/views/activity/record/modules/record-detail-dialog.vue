@@ -42,7 +42,7 @@
 
   interface Props {
     visible: boolean
-    recordId: number | null
+    recordId: string | number | null
   }
 
   interface Emits {

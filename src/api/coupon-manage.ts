@@ -1,4 +1,5 @@
 import request from '@/utils/http'
+import type { Id } from '@/types/backend'
 
 // ============ 优惠券管理 API ============
 
@@ -24,7 +25,7 @@ export function fetchGetCouponList(params: Api.Coupon.CouponSearchParams = {}) {
  * @param id 优惠券ID
  * @returns 优惠券详情
  */
-export function fetchGetCouponDetail(id: number) {
+export function fetchGetCouponDetail(id: Id) {
   return request.get<Api.Coupon.CouponListItem>({
     url: '/coupon/detail',
     params: { id }
@@ -73,7 +74,7 @@ export function fetchUpdateCoupon(data: Api.Coupon.CouponFormData) {
  * @param id 优惠券ID
  * @returns 操作结果
  */
-export function fetchDeleteCoupon(id: number) {
+export function fetchDeleteCoupon(id: Id) {
   return request.del<void>({
     url: '/coupon/delete',
     data: null,
@@ -87,7 +88,7 @@ export function fetchDeleteCoupon(id: number) {
  * @param id 优惠券ID
  * @returns 操作结果
  */
-export function fetchToggleCouponStatus(id: number) {
+export function fetchToggleCouponStatus(id: Id) {
   return request.put<void>({
     url: '/coupon/toggle-status',
     data: null,
@@ -96,12 +97,12 @@ export function fetchToggleCouponStatus(id: number) {
 }
 
 /** 增减剩余可发库存，后端同步调整总量并记录原因。 */
-export function fetchAdjustCouponStock(data: { couponId: number; delta: number; reason: string }) {
+export function fetchAdjustCouponStock(data: { couponId: Id; delta: number; reason: string }) {
   return request.put<Api.Coupon.CouponListItem>({ url: '/coupon/stock', data })
 }
 
 /** 读取库存调整记录。 */
-export function fetchCouponStockAdjustments(couponId: number, currentPage = 1, pageSize = 10) {
+export function fetchCouponStockAdjustments(couponId: Id, currentPage = 1, pageSize = 10) {
   return request.get<Api.Common.PageResult<{
     id: string
     delta: number
@@ -199,7 +200,7 @@ export function fetchGetVerifyRecordList(params: Api.Coupon.VerifyRecordSearchPa
  * @param id 核销记录ID
  * @returns 核销记录详情
  */
-export function fetchGetVerifyRecordDetail(id: number) {
+export function fetchGetVerifyRecordDetail(id: Id) {
   return request.get<Api.Coupon.VerifyRecord>({
     url: '/verify-record/detail',
     params: { id }

@@ -1278,8 +1278,8 @@ declare namespace Api {
 
     /** 优惠券-菜品关联（菜品免单券） */
     interface CouponDishItem {
-      id?: number
-      couponId?: number
+      id?: string | number
+      couponId?: string | number
       dishId: string | number
       createdAt?: string
     }
@@ -1287,7 +1287,7 @@ declare namespace Api {
     /** 优惠券列表项（后端枚举可能返回文字，type/status 兼容 number | string） */
     interface CouponListItem {
       /** 优惠券ID */
-      id: number
+      id: string | number
       /** 优惠券名称 */
       name: string
       /** 描述 */
@@ -1339,7 +1339,7 @@ declare namespace Api {
     /** 优惠券表单数据（提交时 type/status/stackable 必须为数字） */
     interface CouponFormData {
       /** 优惠券ID（编辑时必填） */
-      id?: number
+      id?: string | number
       /** 优惠券名称 */
       name: string
       /** 描述 */
@@ -1373,9 +1373,9 @@ declare namespace Api {
     /** 用户优惠券VO */
     interface UserCouponVO {
       /** 用户优惠券ID */
-      id: number
+      id: string | number
       /** 优惠券ID */
-      couponId: number
+      couponId: string | number
       /** 优惠券名称 */
       name: string
       /** 优惠券描述 */
@@ -1413,7 +1413,7 @@ declare namespace Api {
       /** 用户ID */
       userId: string | number
       /** 优惠券ID */
-      couponId: number
+      couponId: string | number
       /** 开始使用时间 */
       startTime?: string
       /** 过期时间 */
@@ -1423,13 +1423,13 @@ declare namespace Api {
     /** 核销结果VO */
     interface VerifyResultVO {
       /** 核销记录ID（核销成功后返回） */
-      verifyRecordId?: number
+      verifyRecordId?: string | number
       /** 用户优惠券ID */
-      userCouponId: number
+      userCouponId: string | number
       /** 优惠券唯一码（15位数字） */
       couponCode: string
       /** 优惠券ID */
-      couponId: number
+      couponId: string | number
       /** 优惠券名称 */
       couponName: string
       /** 优惠券描述 */
@@ -1441,7 +1441,7 @@ declare namespace Api {
       /** 最低消费金额 */
       minAmount?: number
       /** 用户ID */
-      userId: number
+      userId: string | number
       /** 用户名/手机号（脱敏） */
       userName?: string
       /** 优惠券状态：0-未生效, 1-未使用, 2-已使用, 3-已过期 */
@@ -1463,11 +1463,11 @@ declare namespace Api {
     /** 核销记录 */
     interface VerifyRecord {
       /** 核销ID */
-      id: number
+      id: string | number
       /** 用户优惠券ID */
-      userCouponId: number
+      userCouponId: string | number
       /** 核销管理员ID */
-      merchantId: number
+      merchantId: string | number
       /** 核销码（15位数字） */
       verifyCode: string
       /** 核销时间 */
@@ -1483,7 +1483,7 @@ declare namespace Api {
       /** 每页条数 */
       pageSize?: number
       /** 核销管理员ID */
-      merchantId?: number
+      merchantId?: string | number
       /** 状态：0-未核销, 1-已核销 */
       status?: number
     }

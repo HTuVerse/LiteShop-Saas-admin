@@ -46,7 +46,7 @@
   })
 
   const detailDialogVisible = ref(false)
-  const currentRecordId = ref<number | null>(null)
+  const currentRecordId = ref<string | number | null>(null)
 
   const {
     data,
