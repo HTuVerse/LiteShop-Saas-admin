@@ -116,6 +116,62 @@ export function fetchCouponStockAdjustments(couponId: Id, currentPage = 1, pageS
 
 // ============ 用户优惠券 API ============
 
+/** 后台发放实例；状态 4 仅在管理后台可见。 */
+export interface IssuedCouponItem {
+  id: string
+  userId: string
+  couponId: string
+  code: string
+  status: string | number
+  obtainTime: string
+  startTime?: string
+  expireTime?: string
+  useTime?: string
+}
+
+/** 按模板及用户查询发放实例。 */
+export function fetchIssuedCoupons(params: {
+  couponId: Id
+  userId?: string
+  status?: number
+  currentPage?: number
+  pageSize?: number
+}) {
+  return request.get<Api.Common.PageResult<IssuedCouponItem>>({
+    url: '/user-coupon/admin/issued', params
+  })
+}
+
+/** 读取模板下当前仍可回收的用户券数量。 */
+export function fetchRevocableCouponCount(couponId: Id) {
+  return request.get<number>({ url: '/user-coupon/admin/revocable-count', params: { couponId } })
+}
+
+/** 管理员查看回收原因、操作人和批次。 */
+export function fetchCouponRevokeRecords(couponId: Id, currentPage = 1, pageSize = 10) {
+  return request.get<Api.Common.PageResult<{
+    id: string
+    userCouponId: string
+    userId: string
+    operatorId?: string
+    reason: string
+    batchId?: string
+    createTime: string
+  }>>({ url: '/user-coupon/admin/revoke-records', params: { couponId, currentPage, pageSize } })
+}
+
+/** 回收一张未使用的用户券。 */
+export function fetchRevokeUserCoupon(userCouponId: Id, reason: string) {
+  return request.post<void>({ url: '/user-coupon/admin/revoke-one', data: null, params: { userCouponId, reason } })
+}
+
+/** 回收模板下所有未使用券，模板永久停止发放。 */
+export function fetchRevokeTemplateCoupons(couponId: Id, reason: string) {
+  return request.post<{ revokedCount: number; batchId: string }>({
+    url: '/user-coupon/admin/revoke-template', data: null, params: { couponId, reason }
+  })
+}
+
 /**
  * 发送优惠券给用户
  * @param params 发送参数

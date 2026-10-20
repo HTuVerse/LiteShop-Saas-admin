@@ -52,6 +52,7 @@
       @success="refreshData"
     />
     <StockDialog v-model:visible="stockDialogVisible" :coupon-data="currentCouponData" @success="refreshData" />
+    <IssuedCouponDialog v-model:visible="issuedDialogVisible" :coupon-data="currentCouponData" @success="refreshData" />
   </div>
 </template>
 
@@ -72,6 +73,7 @@
   import CouponDialog from './modules/coupon-dialog.vue'
   import SendCouponDialog from './modules/send-coupon-dialog.vue'
   import StockDialog from './modules/stock-dialog.vue'
+  import IssuedCouponDialog from './modules/issued-coupon-dialog.vue'
   import {
     fetchGetCouponList,
     fetchDeleteCoupon,
@@ -97,7 +99,10 @@
   const couponDialogVisible = ref(false)
   const sendCouponDialogVisible = ref(false)
   const stockDialogVisible = ref(false)
+  const issuedDialogVisible = ref(false)
   const currentCouponData = ref<Partial<Api.Coupon.CouponListItem>>({})
+  const isRecalled = (row: Api.Coupon.CouponListItem) =>
+    !!(row as Api.Coupon.CouponListItem & { recallTime?: string | null }).recallTime
 
   // 优惠券状态配置（支持数字和文字索引）
   const COUPON_STATUS_CONFIG: Record<string | number, { type: 'info' | 'success'; text: string }> =
@@ -257,6 +262,7 @@
           width: 100,
           align: 'center',
           formatter: (row: Api.Coupon.CouponListItem) => {
+            if (isRecalled(row)) return h(ElTag, { type: 'info' }, { default: () => '已批量回收' })
             const config = COUPON_STATUS_CONFIG[
               row.status as keyof typeof COUPON_STATUS_CONFIG
             ] || { type: 'info', text: '未知' }
@@ -275,17 +281,26 @@
         {
           prop: 'operation',
           label: '操作',
-          width: 160,
+          width: 200,
           fixed: 'right',
           formatter: (row: Api.Coupon.CouponListItem) => {
             const statusNum = getStatusNumber(row.status as string | number)
             return h('div', { class: 'flex flex-wrap gap-1' }, [
               h(ArtButtonTable, {
+                auth: 'marketing:coupon',
+                icon: 'ri:coupon-line',
+                label: '发放记录与回收',
+                onClick: () => {
+                  currentCouponData.value = { ...row }
+                  issuedDialogVisible.value = true
+                }
+              }),
+              !isRecalled(row) && h(ArtButtonTable, {
                 auth: 'marketing:coupon:edit',
                 type: 'edit',
                 onClick: () => showCouponDialog('edit', row)
               }),
-              h(ArtButtonTable, {
+              !isRecalled(row) && h(ArtButtonTable, {
                 auth: 'marketing:coupon:edit',
                 icon: 'ri:stack-line',
                 label: '调整库存',
@@ -294,14 +309,14 @@
                   stockDialogVisible.value = true
                 }
               }),
-              h(ArtButtonTable, {
+              !isRecalled(row) && h(ArtButtonTable, {
                 auth: 'marketing:coupon:send',
                 icon: 'ri:send-plane-line',
                 iconColor: '#67c23a',
                 buttonBgColor: '#f0f9eb',
                 onClick: () => showSendCouponDialog(row)
               }),
-              h(ArtButtonTable, {
+              !isRecalled(row) && h(ArtButtonTable, {
                 auth: 'marketing:coupon:status',
                 icon: statusNum === 1 ? 'material-symbols:lock-outline' : 'proicons:lock-open',
                 label: statusNum === 1 ? '下架' : '上架',
@@ -309,7 +324,7 @@
                 buttonBgColor: statusNum === 1 ? '#f4f4f5' : '#ecf5ff',
                 onClick: () => toggleCouponStatus(row)
               }),
-              h(ArtButtonTable, {
+              !isRecalled(row) && h(ArtButtonTable, {
                 auth: 'marketing:coupon:delete',
                 type: 'delete',
                 onClick: () => deleteCoupon(row)

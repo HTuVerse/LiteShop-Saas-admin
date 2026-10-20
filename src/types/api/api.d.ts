@@ -1318,6 +1318,8 @@ declare namespace Api {
       status?: ShelfStatus | ShelfStatusDesc
       /** 创建时间 */
       createTime?: string
+      /** 模板批量回收时间；非空时该模板永久停止发放。 */
+      recallTime?: string | null
       /** 是否可叠加：0-否, 1-是（后端返回文字时为 "否"|"是"） */
       stackable?: number | '否' | '是'
       /** 明确允许一起使用的其他优惠券模板 ID */
