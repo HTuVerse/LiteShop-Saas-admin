@@ -403,7 +403,7 @@
           ? `余额支付成功！订单号：${res.orderNo || res.id}，桌位已结账`
           : `余额支付成功！订单号：${res.orderNo || res.id}`
       )
-      handlePaySuccess()
+      handlePaySuccess(res)
     } catch (error: any) {
       ElMessage.error(error.message || error.msg || '余额支付失败')
     } finally {
@@ -486,7 +486,7 @@
       ElMessage.success(
         `${payMethod.value === 'wechat' ? '微信' : '支付宝'}收款成功！订单号：${order.orderNo || order.id}`
       )
-      handlePaySuccess()
+      handlePaySuccess(order)
     } catch (error: any) {
       // 付款码一次性，失败后清空以便重新扫码
       authCode.value = ''
@@ -513,8 +513,8 @@
   }
 
   // 支付成功
-  const handlePaySuccess = () => {
-    emit('success')
+  const handlePaySuccess = (order: any) => {
+    emit('success', { orderId: order?.id, storeId: order?.storeId ?? cashierStoreId?.value })
     resetState()
   }
 
@@ -605,7 +605,7 @@
       message += ` 订单号：${res.orderNo || res.id}`
 
       ElMessage.success(message)
-      handlePaySuccess()
+      handlePaySuccess(res)
     } catch (error: any) {
       console.error('现金支付失败:', error)
       ElMessage.error(error.message || error.msg || '支付失败')

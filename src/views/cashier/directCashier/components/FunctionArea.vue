@@ -52,17 +52,17 @@
         <div class="btn-label">退菜</div>
       </div>
 
-      <!-- 打印预结单（仅桌位会话模式，有订单时可用） -->
+      <!-- 桌位打印预结单；直接收银可打印刚完成的订单。 -->
       <div
-        v-if="tableInfo"
+        v-if="tableInfo || lastOrderId"
         class="function-btn"
-        :class="{ disabled: !currentOrderId }"
+        :class="{ disabled: tableInfo && !currentOrderId }"
         @click="handleEstimatePrint"
       >
         <div class="btn-icon"
           ><ElIcon><Printer /></ElIcon
         ></div>
-        <div class="btn-label">打印预结单</div>
+        <div class="btn-label">{{ tableInfo ? '打印预结单' : '打印上一单小票' }}</div>
       </div>
 
       <!-- 核销优惠券 -->
@@ -159,15 +159,17 @@
   const { cart, emptyCart } = inject<any>('cart')
   const { pending, addPending } = inject<any>('pending')
   const tableInfo = inject<any>('tableInfo', null)
+  const lastPaidOrder = inject<any>('lastPaidOrder', null)
   const currentOrderId = computed(() => tableInfo && unref(tableInfo.currentOrderId))
+  const lastOrderId = computed(() => unref(lastPaidOrder)?.orderId ?? null)
 
   const discountVisible = ref(false)
   const noteVisible = ref(false)
   const emptyVisible = ref(false)
   const pendingVisible = ref(false)
   const receiptPrintVisible = ref(false)
-  const receiptPrintOrderId = ref<number | null>(null)
-  const receiptPrintStoreId = ref<number | null>(null)
+  const receiptPrintOrderId = ref<string | number | null>(null)
+  const receiptPrintStoreId = ref<string | number | null>(null)
   const receiptPrintTitle = ref('打印预结单')
   const verifyCouponVisible = ref(false)
 
@@ -190,13 +192,16 @@
   }
 
   const handleEstimatePrint = () => {
-    if (!currentOrderId.value) {
-      ElMessage.warning('请先提交订单')
+    const orderId = tableInfo ? currentOrderId.value : lastOrderId.value
+    if (!orderId) {
+      ElMessage.warning(tableInfo ? '请先提交订单' : '请先完成收款')
       return
     }
-    receiptPrintTitle.value = '打印预结单'
-    receiptPrintOrderId.value = currentOrderId.value
-    receiptPrintStoreId.value = tableInfo?.table?.storeId ?? null
+    receiptPrintTitle.value = tableInfo ? '打印预结单' : '打印上一单小票'
+    receiptPrintOrderId.value = orderId
+    receiptPrintStoreId.value = tableInfo
+      ? (tableInfo.table?.storeId ?? null)
+      : (unref(lastPaidOrder)?.storeId ?? null)
     receiptPrintVisible.value = true
   }
 

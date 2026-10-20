@@ -24,7 +24,7 @@
 </template>
 
 <script setup lang="ts">
-  import { ref, provide, reactive } from 'vue'
+  import { computed, ref, provide, reactive, watch } from 'vue'
   import { ElMessage, ElMessageBox } from 'element-plus'
   import { onBeforeRouteLeave } from 'vue-router'
   import Cart from '@views/cashier/directCashier/components/Cart.vue'
@@ -36,6 +36,9 @@
   const cashierSession = useUserStore()
   const cashierStoreId = computed(() => cashierSession.cashierStoreId)
   provide('cashierStoreId', cashierStoreId)
+  const lastPaidOrder = ref<{ orderId: string | number; storeId: string | number | null } | null>(null)
+  provide('lastPaidOrder', lastPaidOrder)
+  watch(cashierStoreId, () => { lastPaidOrder.value = null })
   const pendingKey =
     'cashier-pending:' + cashierSession.scopeKey + ':' + cashierSession.cashierStoreId
 
@@ -286,7 +289,16 @@
   }
 
   // 支付成功
-  const handlePaySuccess = () => {
+  const handlePaySuccess = (printedOrder?: {
+    orderId?: string | number
+    storeId?: string | number | null
+  }) => {
+    if (printedOrder?.orderId) {
+      lastPaidOrder.value = {
+        orderId: printedOrder.orderId,
+        storeId: printedOrder.storeId ?? cashierStoreId.value ?? null
+      }
+    }
     // 如果是挂单中的订单，删除挂单
     if (cart.uuid) {
       const pendingIndex = pending.value.findIndex((item) => item.uuid === cart.uuid)
