@@ -1,6 +1,6 @@
 <template>
   <div class="cart-member">
-    <div v-if="member && !editing" class="member-info">
+    <div v-if="member" class="member-info">
       <div class="member-header">
         <ElAvatar class="member-avatar" :size="38" :src="member.avatar || member.portrait">
           {{ memberName.charAt(0) }}
@@ -13,8 +13,7 @@
           <span class="phone">手机号：{{ member.phone || member.cellphone || '未绑定' }}</span>
         </div>
         <div v-if="!memberLocked" class="member-actions">
-          <ElButton plain size="small" @click="startEditing">更换</ElButton>
-          <ElButton type="danger" text size="small" @click="handleClear">清除</ElButton>
+          <ElButton plain size="small" @click="handleChangeMember">更换</ElButton>
         </div>
       </div>
       <div class="member-stats">
@@ -32,7 +31,6 @@
     <div v-else-if="!memberLocked" class="member-lookup">
       <ElAvatar :size="40" :icon="User" />
       <ElInput
-        ref="phoneInputRef"
         v-model="phone"
         inputmode="numeric"
         maxlength="11"
@@ -43,14 +41,12 @@
         @keyup.enter="lookupMember"
       />
       <ElButton type="primary" :loading="loading" @click="lookupMember">加载会员</ElButton>
-      <ElButton v-if="member" text @click="editing = false">取消</ElButton>
     </div>
-
   </div>
 </template>
 
 <script setup lang="ts">
-  import { computed, inject, nextTick, ref } from 'vue'
+  import { computed, inject, ref } from 'vue'
   import { ElAvatar, ElButton, ElInput, ElMessage } from 'element-plus'
   import { Iphone, User } from '@element-plus/icons-vue'
   import { fetchCashierMemberByPhone } from '@/api/cashier'
@@ -60,9 +56,7 @@
   const tableInfo = inject<any>('tableInfo', null)
   const memberLocked = computed(() => Boolean(tableInfo?.hasOrder?.value))
   const phone = ref('')
-  const editing = ref(false)
   const loading = ref(false)
-  const phoneInputRef = ref<InstanceType<typeof ElInput>>()
   let lookupSequence = 0
 
   const memberName = computed(
@@ -80,12 +74,6 @@
     return name && !/^\d+$/.test(name) ? name : '未设置等级'
   })
   const memberPoints = computed(() => Number(member.value?.points ?? 0))
-
-  const startEditing = () => {
-    phone.value = ''
-    editing.value = true
-    nextTick(() => phoneInputRef.value?.focus())
-  }
 
   const handlePhoneInput = (value: string) => {
     phone.value = String(value || '')
@@ -112,7 +100,6 @@
         username: result.username || result.nickname || `会员${result.id}`,
         surplusMoney: Number(result.surplusMoney ?? result.balance ?? 0)
       })
-      editing.value = false
       ElMessage.success('会员加载成功')
     } catch (error: any) {
       if (sequence === lookupSequence) {
@@ -123,11 +110,11 @@
     }
   }
 
-  const handleClear = () => {
+  const handleChangeMember = () => {
     lookupSequence++
     updateMember(null)
     phone.value = ''
-    editing.value = false
+    loading.value = false
   }
 </script>
 
@@ -208,9 +195,6 @@
       font-size: 11px;
     }
 
-    :deep(.el-button + .el-button) {
-      margin-left: 0;
-    }
   }
 
   .member-stats {
