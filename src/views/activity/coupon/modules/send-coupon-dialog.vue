@@ -72,7 +72,7 @@
           value-format="YYYY-MM-DD HH:mm:ss"
           style="width: 100%"
         />
-        <div class="form-tip">不填默认 3 天，最长不超过优惠券截止时间</div>
+        <div class="form-tip">不填沿用优惠券截止时间；长期有效的券则长期有效</div>
       </ElFormItem>
     </ArtForm>
 

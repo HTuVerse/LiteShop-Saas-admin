@@ -1318,6 +1318,8 @@ declare namespace Api {
       createTime?: string
       /** 是否可叠加：0-否, 1-是（后端返回文字时为 "否"|"是"） */
       stackable?: number | '否' | '是'
+      /** 明确允许一起使用的其他优惠券模板 ID */
+      stackWithCouponIds?: Array<string | number>
       /** 互斥组ID */
       exclusiveGroup?: string
       /** 关联菜品列表（菜品免单券） */
@@ -1359,11 +1361,12 @@ declare namespace Api {
       /** 有效期开始时间 */
       startTime?: string
       /** 有效期结束时间 */
-      endTime?: string
+      endTime?: string | null
       /** 状态：0-下架, 1-上架（提交时传数字） */
       status?: ShelfStatus
       /** 是否可叠加：0-否, 1-是（提交时传数字） */
       stackable?: number
+      stackWithCouponIds?: Array<string | number>
       /** 互斥组ID */
       exclusiveGroup?: string
       /** 关联菜品列表（菜品免单券时使用） */

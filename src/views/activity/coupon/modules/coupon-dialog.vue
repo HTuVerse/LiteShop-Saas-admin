@@ -113,17 +113,41 @@
         <span class="form-tip">都不填表示全天</span>
       </ElFormItem>
 
-      <ElFormItem label="有效期" prop="timeRange">
+      <ElFormItem label="生效时间" prop="startTime">
         <ElDatePicker
-          v-model="timeRange"
-          type="datetimerange"
-          range-separator="至"
-          start-placeholder="开始时间"
-          end-placeholder="结束时间"
+          v-model="formData.startTime"
+          type="datetime"
+          placeholder="请选择生效时间"
           format="YYYY-MM-DD HH:mm"
           value-format="YYYY-MM-DD HH:mm:ss"
           style="width: 100%"
         />
+      </ElFormItem>
+
+      <ElFormItem label="截止方式">
+        <ElCheckbox v-model="longTerm">长期有效</ElCheckbox>
+      </ElFormItem>
+
+      <ElFormItem v-if="!longTerm" label="结束时间" prop="endTime">
+        <ElDatePicker v-model="formData.endTime" type="datetime" placeholder="请选择结束时间"
+          format="YYYY-MM-DD HH:mm" value-format="YYYY-MM-DD HH:mm:ss" style="width: 100%" />
+      </ElFormItem>
+
+      <ElFormItem label="叠加使用">
+        <ElRadioGroup v-model="formData.stackable" @change="(value) => { if (Number(value) === 0) formData.stackWithCouponIds = [] }">
+          <ElRadio :value="0">不可叠加</ElRadio>
+          <ElRadio :value="1">可与指定券叠加</ElRadio>
+        </ElRadioGroup>
+      </ElFormItem>
+
+      <ElFormItem v-if="formData.stackable === 1" label="可叠加券" prop="stackWithCouponIds">
+        <ElSelect v-model="formData.stackWithCouponIds" multiple filterable remote reserve-keyword
+          :remote-method="searchStackOptions" :loading="stackLoading"
+          placeholder="输入优惠券名称搜索；不选表示暂不可与其他券叠加" style="width: 100%">
+          <ElOption v-for="coupon in stackOptions" :key="String(coupon.id)"
+            :label="coupon.name" :value="String(coupon.id)" />
+        </ElSelect>
+        <span class="form-tip">选择后双向生效；对方也必须开启叠加使用。每单同一券模板限一张。</span>
       </ElFormItem>
 
       <ElFormItem label="优惠券描述" prop="description">
@@ -170,6 +194,7 @@
     fetchUpdateCoupon,
     fetchAddCoupon,
     fetchGetCouponDetail,
+    fetchGetCouponList,
     fetchCouponDishOptions,
     fetchCouponDishDetail
   } from '@/api/coupon-manage'
@@ -206,6 +231,9 @@
   const dishOptions = ref<Api.Dish.DishListItem[]>([])
   const storeLoading = ref(false)
   const storeOptions = ref<Api.Store.StoreListItem[]>([])
+  const stackLoading = ref(false)
+  const stackOptions = ref<Api.Coupon.CouponListItem[]>([])
+  const longTerm = ref(false)
   const weekdays = [
     { value: 1, label: '周一' }, { value: 2, label: '周二' }, { value: 3, label: '周三' },
     { value: 4, label: '周四' }, { value: 5, label: '周五' }, { value: 6, label: '周六' },
@@ -213,6 +241,26 @@
   ]
   let dishSearchSeq = 0
   let storeSearchSeq = 0
+  let stackSearchSeq = 0
+
+  const searchStackOptions = async (keyword: string) => {
+    const seq = ++stackSearchSeq
+    const name = keyword.trim()
+    if (!name) return
+    stackLoading.value = true
+    try {
+      const page = await fetchGetCouponList({ name, currentPage: 1, pageSize: 20 })
+      if (seq !== stackSearchSeq) return
+      const selected = stackOptions.value.filter((item) =>
+        formData.stackWithCouponIds.includes(String(item.id)))
+      stackOptions.value = [...selected, ...page.records.filter((item) =>
+        String(item.id) !== String(formData.id)
+        && (item.stackable === 1 || item.stackable === '是')
+        && !selected.some((existing) => String(existing.id) === String(item.id)))]
+    } finally {
+      if (seq === stackSearchSeq) stackLoading.value = false
+    }
+  }
 
   const searchStoreOptions = async (keyword: string) => {
     const seq = ++storeSearchSeq
@@ -254,9 +302,6 @@
     }
   }
 
-  // 时间范围
-  const timeRange = ref<[string, string] | null>(null)
-
   // 表单数据
   const formData = reactive({
     id: undefined as string | number | undefined,
@@ -272,7 +317,9 @@
     useStartTime: '' as string,
     useEndTime: '' as string,
     startTime: '',
-    endTime: ''
+    endTime: '',
+    stackable: 0 as 0 | 1,
+    stackWithCouponIds: [] as string[]
   })
 
   // 根据类型显示不同的标签和提示（与后端 CouponTypeEnum 一致）
@@ -333,7 +380,13 @@
         },
         trigger: 'change'
       }
-    ]
+    ],
+    startTime: [{ required: true, message: '请选择生效时间', trigger: 'change' }],
+    endTime: [{ validator: (_rule, value: string, callback) => {
+      if (longTerm.value) return callback()
+      if (!value) return callback(new Error('请选择结束时间，或勾选长期有效'))
+      callback(value > formData.startTime ? undefined : new Error('结束时间必须晚于生效时间'))
+    }, trigger: 'change' }]
   }
 
   // 类型改变时重置面值（与后端 0-满减 1-整单折扣 2-菜品免单 一致）
@@ -352,6 +405,7 @@
   const initFormData = () => {
     dishSearchSeq++
     storeSearchSeq++
+    stackSearchSeq++
     dishLoading.value = false
     const isEdit = props.type === 'edit' && props.couponData
     const row = props.couponData
@@ -377,17 +431,14 @@
       useStartTime: isEdit ? row?.useStartTime || '' : '',
       useEndTime: isEdit ? row?.useEndTime || '' : '',
       startTime: isEdit ? row?.startTime || '' : '',
-      endTime: isEdit ? row?.endTime || '' : ''
+      endTime: isEdit ? row?.endTime || '' : '',
+      stackable: isEdit && (row?.stackable === 1 || row?.stackable === '是') ? 1 : 0,
+      stackWithCouponIds: isEdit ? (row?.stackWithCouponIds || []).map(String) : []
     })
-
-    // 设置时间范围
-    if (isEdit && row?.startTime && row?.endTime) {
-      timeRange.value = [row.startTime, row.endTime]
-    } else {
-      timeRange.value = null
-    }
+    longTerm.value = isEdit ? !row?.endTime : false
     dishOptions.value = []
     storeOptions.value = []
+    stackOptions.value = []
     if (isEdit && row?.id) {
       const editingId = row.id
       fetchGetCouponDetail(editingId)
@@ -398,13 +449,22 @@
           formData.useWeekdays = (detail.useWeekdays || '').split(',').filter(Boolean).map(Number)
           formData.useStartTime = detail.useStartTime || ''
           formData.useEndTime = detail.useEndTime || ''
+          formData.startTime = detail.startTime || ''
+          formData.endTime = detail.endTime || ''
+          longTerm.value = !detail.endTime
+          formData.stackable = detail.stackable === 1 || detail.stackable === '是' ? 1 : 0
+          formData.stackWithCouponIds = (detail.stackWithCouponIds || []).map(String)
           const loaded = await Promise.allSettled(formData.dishIds.map(fetchCouponDishDetail))
           const loadedStores = await Promise.allSettled(formData.storeIds.map(fetchGetStoreDetail))
+          const loadedStack = await Promise.allSettled(formData.stackWithCouponIds.map(fetchGetCouponDetail))
           if (props.visible && String(props.couponData?.id) === String(editingId)) {
             dishOptions.value = loaded.flatMap((result) =>
               result.status === 'fulfilled' ? [result.value] : []
             )
             storeOptions.value = loadedStores.flatMap((result) =>
+              result.status === 'fulfilled' ? [result.value] : []
+            )
+            stackOptions.value = loadedStack.flatMap((result) =>
               result.status === 'fulfilled' ? [result.value] : []
             )
           }
@@ -413,15 +473,9 @@
     }
   }
 
-  // 监听时间范围变化
-  watch(timeRange, (val) => {
-    if (val && val.length === 2) {
-      formData.startTime = val[0]
-      formData.endTime = val[1]
-    } else {
-      formData.startTime = ''
-      formData.endTime = ''
-    }
+  watch(longTerm, (checked) => {
+    if (checked) formData.endTime = ''
+    formRef.value?.clearValidate('endTime')
   })
 
   // 监听对话框状态变化
@@ -455,7 +509,9 @@
       useStartTime: formData.useStartTime || undefined,
       useEndTime: formData.useEndTime || undefined,
       startTime: formData.startTime || undefined,
-      endTime: formData.endTime || undefined
+      endTime: longTerm.value ? null : formData.endTime,
+      stackable: formData.stackable,
+      stackWithCouponIds: formData.stackable === 1 ? formData.stackWithCouponIds : []
     }
   }
 
@@ -469,6 +525,10 @@
       if (!!formData.useStartTime !== !!formData.useEndTime
         || (formData.useStartTime && formData.useStartTime >= formData.useEndTime)) {
         ElMessage.warning('每日时段需同时填写，且结束时间应晚于开始时间')
+        return
+      }
+      if (!formData.startTime || (!longTerm.value && (!formData.endTime || formData.endTime <= formData.startTime))) {
+        ElMessage.warning('请填写有效的生效时间和结束时间，或勾选长期有效')
         return
       }
 

@@ -242,7 +242,7 @@
           width: 180,
           formatter: (row: Api.Coupon.CouponListItem) => {
             const start = row.startTime ? row.startTime.substring(0, 10) : '未设置'
-            const end = row.endTime ? row.endTime.substring(0, 10) : '未设置'
+            const end = row.endTime ? row.endTime.substring(0, 10) : '长期有效'
             return h('div', { style: 'font-size: 12px; line-height: 1.5;' }, [
               h('div', {}, `${start}`),
               h('div', { style: 'color: #909399;' }, `至 ${end}`)
