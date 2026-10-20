@@ -69,7 +69,6 @@
   // 搜索表单
   const searchForm = reactive({
     storeId: undefined as Id | undefined,
-    printScene: undefined as 'ORDER' | 'ADD_ITEMS' | undefined,
     enabled: undefined as number | undefined
   })
 
@@ -116,7 +115,6 @@
         currentPage: 1,
         pageSize: 10,
         storeId: searchForm.storeId,
-        printScene: searchForm.printScene,
         enabled: searchForm.enabled
       },
       paginationKey: {
@@ -127,12 +125,11 @@
         { type: 'index', width: 60, label: '序号' },
         { prop: 'templateName', label: '模板名称', width: 150 },
         {
-          prop: 'printScene',
-          label: '打印用途',
-          width: 110,
-          formatter: (row: any) => row.printScene === 'ADD_ITEMS' ? '加菜' : '提交订单'
+          prop: 'paperWidth',
+          label: '纸张宽度',
+          width: 100,
+          formatter: (row: any) => (row.paperWidth === 1 ? '80mm' : '58mm')
         },
-        { prop: 'paperWidth', label: '纸张宽度', width: 100 },
         {
           prop: 'isDefault',
           label: '默认模板',
@@ -254,7 +251,6 @@
    */
   const handleReset = () => {
     searchForm.storeId = undefined
-    searchForm.printScene = undefined
     searchForm.enabled = undefined
     resetSearchParams()
   }
@@ -269,9 +265,6 @@
     }
     if (searchForm.enabled !== undefined) {
       params.enabled = searchForm.enabled
-    }
-    if (searchForm.printScene !== undefined) {
-      params.printScene = searchForm.printScene
     }
     getData(params)
   }
@@ -329,7 +322,7 @@
       return
     }
     try {
-      await ElMessageBox.confirm(`确定要设置为该门店的${row.printScene === 'ADD_ITEMS' ? '加菜' : '提交订单'}默认模板吗？`, '操作确认', {
+      await ElMessageBox.confirm('确定要设置为该门店的默认模板吗？', '操作确认', {
         confirmButtonText: '确定',
         cancelButtonText: '取消',
         type: 'warning'

@@ -25,14 +25,6 @@
                 <ElInput v-model="formData.templateName" placeholder="请输入模板名称" />
               </ElFormItem>
 
-              <ElFormItem label="打印用途" prop="printScene">
-                <ElRadioGroup v-model="formData.printScene">
-                  <ElRadio value="ORDER">提交订单</ElRadio>
-                  <ElRadio value="ADD_ITEMS">加菜</ElRadio>
-                </ElRadioGroup>
-                <ElText type="info" size="small" class="ml-2">加菜单只打印本次新增菜品</ElText>
-              </ElFormItem>
-
               <ElFormItem label="所属门店" prop="storeId">
                 <ElSelect
                   v-model="formData.storeId"
@@ -185,6 +177,10 @@
 
               <ElFormItem label="显示菜品金额">
                 <ElSwitch v-model="formData.showDishAmount" :active-value="1" :inactive-value="0" />
+              </ElFormItem>
+
+              <ElFormItem label="显示订单合计">
+                <ElSwitch v-model="formData.showOrderTotal" :active-value="1" :inactive-value="0" />
               </ElFormItem>
 
               <ElFormItem label="显示菜品规格">
@@ -411,7 +407,6 @@
   const formData = reactive({
     id: undefined as number | undefined,
     templateName: '',
-    printScene: 'ORDER',
     storeId: undefined as string | undefined,
     paperWidth: 0,
     showLogo: 0,
@@ -426,6 +421,7 @@
     showDishUnitPrice: 1,
     showDishQuantity: 1,
     showDishAmount: 1,
+    showOrderTotal: 1,
     showDishSpec: 1,
     showDishOriginalPrice: 1,
     showDishDiscountPrice: 1,
@@ -448,7 +444,6 @@
   const formRules = {
     storeId: storeRules,
     templateName: [{ required: true, message: '请输入模板名称', trigger: 'blur' }],
-    printScene: [{ required: true, message: '请选择打印用途', trigger: 'change' }],
     paperWidth: [{ required: true, message: '请选择纸张宽度', trigger: 'change' }]
   }
 
@@ -527,7 +522,6 @@
     Object.assign(formData, {
       id: undefined,
       templateName: '',
-      printScene: 'ORDER',
       storeId: undefined,
       paperWidth: 0,
       showLogo: 0,
@@ -542,6 +536,7 @@
       showDishUnitPrice: 1,
       showDishQuantity: 1,
       showDishAmount: 1,
+      showOrderTotal: 1,
       showDishSpec: 1,
       showDishOriginalPrice: 1,
       showDishDiscountPrice: 1,

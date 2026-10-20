@@ -123,11 +123,10 @@
                 <ElRadio :value="1">80mm</ElRadio>
               </ElRadioGroup>
             </ElFormItem>
-            <ElFormItem label="默认打印模板" prop="templateId">
+            <ElFormItem label="打印模板" prop="templateId">
               <ElSelect
                 v-model="formData.templateId"
-                placeholder="请选择打印模板"
-                :clearable="!requiresTemplateSelection"
+                placeholder="请选择这台打印机固定使用的模板"
                 filterable
                 :disabled="!formData.storeId || dialogLoading"
                 style="width: 100%"
@@ -157,11 +156,7 @@
                 </ElOption>
               </ElSelect>
               <ElText type="info" size="small" class="mt-1" style="display: block">
-                {{
-                  requiresTemplateSelection
-                    ? '已绑定模板的打印机变更门店时，请重新选择适用模板'
-                    : '不选择则使用默认模板'
-                }}
+                首次下单与后续加菜都使用此模板；加菜只打印本次新增菜品
               </ElText>
             </ElFormItem>
           </ArtForm>
@@ -330,11 +325,6 @@
   } = useManagedStores()
   const formRef = ref()
   const templateList = ref<any[]>([])
-  const originalTemplateId = ref<Id>()
-  // 更新接口忽略空 templateId，已有绑定在换店后需改选，避免保留原门店模板。
-  const requiresTemplateSelection = computed(
-    () => dialogType.value === 'edit' && originalTemplateId.value != null
-  )
   const selectedTemplateData = ref<any>(null)
   const effectivePreviewTemplate = computed(() =>
     selectedTemplateData.value
@@ -363,8 +353,8 @@
       {
         trigger: 'change',
         validator: (_rule, value, callback) => {
-          if (requiresTemplateSelection.value && !value)
-            callback(new Error('请选择当前门店适用的打印模板'))
+          if (!value)
+            callback(new Error('请选择这台打印机使用的打印模板'))
           else if (hasUnavailableTemplate.value)
             callback(new Error('请重新选择当前门店适用的打印模板'))
           else callback()
@@ -557,7 +547,7 @@
         {
           prop: 'operation',
           label: '操作',
-          width: 240,
+          width: 140,
           fixed: 'right',
           formatter: (row: any) =>
             h(
@@ -644,7 +634,6 @@
     formData.storeId
       ? templateList.value.filter(
           (template) =>
-            (template.printScene == null || template.printScene === 'ORDER') &&
             (template.storeId == null || String(template.storeId) === formData.storeId)
         )
       : []
@@ -712,7 +701,6 @@
   const showDialog = async (type: DialogType, row?: any) => {
     if (dialogLoading.value || submitLoading.value) return
     dialogType.value = type
-    originalTemplateId.value = type === 'edit' ? row?.templateId : undefined
     dialogLoading.value = true
     selectedTemplateData.value = null
     dialogVisible.value = true

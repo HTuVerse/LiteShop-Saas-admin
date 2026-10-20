@@ -23,16 +23,7 @@
           />
         </ElSelect>
       </ElFormItem>
-      <ElFormItem label="打印模板">
-        <ElSelect
-          v-model="form.templateId"
-          placeholder="不选则优先使用打印机绑定模板"
-          clearable
-          style="width: 100%"
-        >
-          <ElOption v-for="t in templateList" :key="t.id" :label="t.templateName" :value="t.id" />
-        </ElSelect>
-      </ElFormItem>
+      <ElText type="info" size="small">使用所选打印机绑定的模板</ElText>
     </ArtForm>
     <template #footer>
       <ElButton @click="dialogVisible = false">取消</ElButton>
@@ -55,10 +46,9 @@
 
 <script setup lang="ts">
   import { ref, computed, watch } from 'vue'
-  import { ElDialog, ElFormItem, ElSelect, ElOption, ElButton, ElMessage } from 'element-plus'
+  import { ElDialog, ElFormItem, ElSelect, ElOption, ElButton, ElMessage, ElText } from 'element-plus'
   import { printOrder } from '@/api/order-print'
   import { getPrinterListByStore } from '@/api/printer'
-  import { getTemplatePage } from '@/api/print-template'
 
   const props = withDefaults(
     defineProps<{
@@ -81,11 +71,9 @@
   })
 
   const form = ref({
-    printerId: undefined as number | undefined,
-    templateId: undefined as number | undefined
+    printerId: undefined as number | undefined
   })
   const printerList = ref<any[]>([])
-  const templateList = ref<any[]>([])
   const printing = ref(false)
 
   const loadPrinters = async () => {
@@ -98,29 +86,12 @@
     }
   }
 
-  const loadTemplates = async () => {
-    try {
-      const res = await getTemplatePage({ currentPage: 1, pageSize: 100, enabled: 1 })
-      const list = (res as any)?.records ?? (res as any)?.data?.records ?? (res as any)?.list ?? []
-      templateList.value = Array.isArray(list)
-        ? list.filter(
-            (template) =>
-              (template.printScene == null || template.printScene === 'ORDER') &&
-              (template.storeId == null || String(template.storeId) === String(props.storeId))
-          )
-        : []
-    } catch {
-      templateList.value = []
-    }
-  }
-
   watch(
     () => props.visible,
     (visible) => {
       if (visible) {
-        form.value = { printerId: undefined, templateId: undefined }
+        form.value = { printerId: undefined }
         loadPrinters()
-        loadTemplates()
       }
     }
   )
@@ -135,8 +106,7 @@
     try {
       await printOrder({
         orderId,
-        printerId: form.value.printerId,
-        templateId: form.value.templateId
+        printerId: form.value.printerId
       })
       ElMessage.success('打印任务已提交，请等待打印机出纸')
       emit('success')

@@ -41,18 +41,7 @@
     { label: '禁用', value: 0 },
     { label: '正常', value: 1 }
   ]
-  const printSceneOptions = [
-    { label: '提交订单', value: 'ORDER' },
-    { label: '加菜', value: 'ADD_ITEMS' }
-  ]
-
   const formItems = computed(() => [
-    {
-      label: '打印用途',
-      key: 'printScene',
-      type: 'select',
-      props: { placeholder: '请选择用途', options: printSceneOptions, clearable: true }
-    },
     {
       label: '门店',
       key: 'storeId',
