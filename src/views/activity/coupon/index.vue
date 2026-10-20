@@ -117,10 +117,12 @@
     1: { type: 'success', text: '整单折扣券' },
     2: { type: 'danger', text: '菜品免单券' },
     3: { type: 'success', text: '菜品折扣券' },
+    4: { type: 'warning', text: '代金券' },
     满减券: { type: 'warning', text: '满减券' },
     整单折扣券: { type: 'success', text: '整单折扣券' },
     菜品免单券: { type: 'danger', text: '菜品免单券' },
-    菜品折扣券: { type: 'success', text: '菜品折扣券' }
+    菜品折扣券: { type: 'success', text: '菜品折扣券' },
+    代金券: { type: 'warning', text: '代金券' }
   }
 
   /**
@@ -273,7 +275,7 @@
         {
           prop: 'operation',
           label: '操作',
-          width: 260,
+          width: 160,
           fixed: 'right',
           formatter: (row: Api.Coupon.CouponListItem) => {
             const statusNum = getStatusNumber(row.status as string | number)

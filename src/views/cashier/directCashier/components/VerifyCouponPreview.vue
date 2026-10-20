@@ -2,13 +2,13 @@
 <template>
   <div class="verify-preview">
     <div class="coupon-card" :class="{ disabled: !data?.canVerify }">
-      <!-- 左侧：面值/类型（与 CouponTypeEnum：0满减 1整单折扣 2菜品免单 一致） -->
+      <!-- 左侧：根据券型展示金额、折扣或免单 -->
       <div class="coupon-left">
-        <template v-if="data?.couponType === 1">
+        <template v-if="couponTypeNumber === 1 || couponTypeNumber === 3">
           <span class="value-num">{{ formatDiscount(data.couponValue) }}</span>
           <span class="value-unit">折</span>
         </template>
-        <template v-else-if="data?.couponType === 2">
+        <template v-else-if="couponTypeNumber === 2">
           <span class="value-num free">免单</span>
         </template>
         <template v-else>
@@ -63,12 +63,15 @@
 <script setup lang="ts">
   import { computed } from 'vue'
   import { ElButton } from 'element-plus'
+  import { CouponTypeEnumMap, getEnumNumber } from '@/utils/enum/enumConverter'
 
-  /** 与后端 CouponTypeEnum 一致：0-满减券 1-整单折扣券 2-菜品免单券 */
+  /** 与后端 CouponTypeEnum 保持一致。 */
   const COUPON_TYPE_MAP: Record<number, string> = {
     0: '满减券',
     1: '整单折扣券',
-    2: '菜品免单券'
+    2: '菜品免单券',
+    3: '菜品折扣券',
+    4: '代金券'
   }
 
   defineOptions({ name: 'VerifyCouponPreview' })
@@ -86,9 +89,10 @@
     (e: 'verify'): void
   }>()
 
-  const couponTypeText = computed(() =>
-    props.data ? (COUPON_TYPE_MAP[props.data.couponType] ?? '优惠券') : ''
-  )
+  const couponTypeNumber = computed(() => props.data
+    ? getEnumNumber(props.data.couponType as string | number, CouponTypeEnumMap) : null)
+  const couponTypeText = computed(() => props.data
+    ? (COUPON_TYPE_MAP[couponTypeNumber.value ?? -1] ?? '优惠券') : '')
 
   function formatDiscount(value: number) {
     if (value == null) return '-'

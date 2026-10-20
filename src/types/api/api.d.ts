@@ -1253,10 +1253,10 @@ declare namespace Api {
   /** 优惠券管理类型 */
   namespace Coupon {
     /** 优惠券类型枚举（请求后端传数字） */
-    type CouponType = 0 | 1 | 2 | 3 // 3-菜品折扣券
+    type CouponType = 0 | 1 | 2 | 3 | 4 // 4-代金券
 
     /** 优惠券类型描述（后端返回为文字时使用） */
-    type CouponTypeDesc = '满减券' | '整单折扣券' | '菜品免单券' | '菜品折扣券'
+    type CouponTypeDesc = '满减券' | '整单折扣券' | '菜品免单券' | '菜品折扣券' | '代金券'
 
     /** 优惠券状态枚举（用户持有的优惠券状态） */
     type CouponStatus = 0 | 1 | 2 | 3 // 0-未生效, 1-未使用, 2-已使用, 3-已过期
@@ -1292,7 +1292,7 @@ declare namespace Api {
       name: string
       /** 描述 */
       description?: string
-      /** 类型：0-满减券, 1-整单折扣券, 2-菜品免单券（后端返回文字时为 CouponTypeDesc） */
+      /** 券类型；后端也可能返回中文描述。 */
       type: CouponType | CouponTypeDesc
       /** 面值（满减为金额，整单折扣为折扣率如0.85，菜品免单可不使用） */
       value: number
@@ -1306,6 +1306,8 @@ declare namespace Api {
       storeIds?: string
       /** 逗号分隔的可用星期；空表示每天 */
       useWeekdays?: string
+      unavailableDates?: string
+      unavailableHolidays?: string
       useStartTime?: string
       useEndTime?: string
       /** 有效期开始时间 */
@@ -1346,7 +1348,7 @@ declare namespace Api {
       name: string
       /** 描述 */
       description?: string
-      /** 类型：0-满减券, 1-整单折扣券, 2-菜品免单券 */
+      /** 券类型编码。 */
       type: CouponType
       /** 面值（满减为金额，整单折扣为折扣率如0.85，菜品免单可为0） */
       value: number
@@ -1356,6 +1358,8 @@ declare namespace Api {
       totalCount?: number
       storeIds?: string
       useWeekdays?: string
+      unavailableDates?: string
+      unavailableHolidays?: string
       useStartTime?: string
       useEndTime?: string
       /** 有效期开始时间 */
@@ -1383,12 +1387,14 @@ declare namespace Api {
       name: string
       /** 优惠券描述 */
       description?: string
-      /** 类型：0-满减, 1-折扣, 2-现金券 */
-      type: CouponType
+      /** 券类型；后端也可能返回中文描述。 */
+      type: CouponType | CouponTypeDesc
       /** 面值 */
       value: number
       /** 最低消费金额 */
       minAmount?: number
+      unavailableDates?: string
+      unavailableHolidays?: string
       /** 状态：0-未生效, 1-未使用, 2-已使用, 3-已过期 */
       status: CouponStatus
       /** 有效期开始 */
@@ -1437,8 +1443,8 @@ declare namespace Api {
       couponName: string
       /** 优惠券描述 */
       couponDescription?: string
-      /** 优惠券类型：0-满减, 1-折扣, 2-现金券 */
-      couponType: CouponType
+      /** 券类型；后端也可能返回中文描述。 */
+      couponType: CouponType | CouponTypeDesc
       /** 优惠券面值 */
       couponValue: number
       /** 最低消费金额 */

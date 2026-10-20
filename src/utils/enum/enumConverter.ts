@@ -335,8 +335,9 @@ export const PrizeTypeEnumMap = createEnumMap({
 export const CouponTypeEnumMap = createEnumMap({
   满减券: 0,
   整单折扣券: 1,
-    菜品免单券: 2,
-    菜品折扣券: 3
+  菜品免单券: 2,
+  菜品折扣券: 3,
+  代金券: 4
 })
 
 /**

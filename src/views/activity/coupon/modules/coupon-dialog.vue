@@ -23,13 +23,14 @@
           <ElRadio :value="1">整单折扣券</ElRadio>
           <ElRadio :value="2">菜品免单券</ElRadio>
           <ElRadio :value="3">菜品折扣券</ElRadio>
+          <ElRadio :value="4">代金券</ElRadio>
         </ElRadioGroup>
       </ElFormItem>
 
       <ElFormItem v-if="formData.type !== 2" :label="valueLabel" prop="value">
         <ElInputNumber
           v-model="formData.value"
-          :min="[1, 3].includes(formData.type) ? 0.01 : 0.01"
+          :min="0.01"
           :max="[1, 3].includes(formData.type) ? 0.99 : 99999"
           :precision="2"
           :step="[1, 3].includes(formData.type) ? 0.05 : 1"
@@ -39,7 +40,7 @@
         <span class="form-tip">{{ valueTip }}</span>
       </ElFormItem>
 
-      <ElFormItem v-if="[2, 3].includes(formData.type)" :label="formData.type === 2 ? '可免单菜品' : '可折扣菜品'" prop="dishIds">
+      <ElFormItem v-if="[2, 3, 4].includes(formData.type)" :label="formData.type === 4 ? '适用菜品' : formData.type === 2 ? '可免单菜品' : '可折扣菜品'" prop="dishIds">
         <ElSelect
           v-model="formData.dishIds"
           multiple
@@ -48,7 +49,7 @@
           reserve-keyword
           :remote-method="searchDishOptions"
           :loading="dishLoading"
-          :placeholder="formData.type === 2 ? '输入菜品名称，任选一种免一份' : '输入菜品名称，每单任选一份打折'"
+          :placeholder="formData.type === 4 ? '不选表示全部菜品可用' : formData.type === 2 ? '输入菜品名称，任选一种免一份' : '输入菜品名称，每单任选一份打折'"
           style="width: 100%"
         >
           <ElOption
@@ -58,7 +59,7 @@
             :value="String(dish.id)"
           />
         </ElSelect>
-        <span class="form-tip">订单中命中多个菜品时，自动优惠价格最高的一份。</span>
+        <span class="form-tip">{{ formData.type === 4 ? '选择后只抵扣指定菜品的实付金额。' : '订单中命中多个菜品时，自动优惠价格最高的一份。' }}</span>
       </ElFormItem>
 
       <ElFormItem label="最低消费" prop="minAmount">
@@ -102,6 +103,20 @@
           <ElCheckbox v-for="day in weekdays" :key="day.value" :value="day.value" :label="day.label" />
         </ElCheckboxGroup>
         <span class="form-tip">不选表示每天可用</span>
+      </ElFormItem>
+
+      <ElFormItem label="不可用日期">
+        <ElDatePicker v-model="formData.unavailableDates" type="dates" value-format="YYYY-MM-DD"
+          placeholder="选择不可用的具体日期" style="width: 100%" />
+        <span class="form-tip">适合某一年的连续假期或临时停用日期。</span>
+      </ElFormItem>
+
+      <ElFormItem label="每年不可用节日">
+        <ElCheckboxGroup v-model="formData.unavailableHolidays">
+          <ElCheckbox v-for="holiday in holidayOptions" :key="holiday.value"
+            :value="holiday.value" :label="holiday.label" />
+        </ElCheckboxGroup>
+        <span class="form-tip">仅节日当天自动匹配；调休和连续假期请在“不可用日期”补充。农历节日支持至 2099 年。</span>
       </ElFormItem>
 
       <ElFormItem label="每日时段">
@@ -239,6 +254,15 @@
     { value: 4, label: '周四' }, { value: 5, label: '周五' }, { value: 6, label: '周六' },
     { value: 7, label: '周日' }
   ]
+  const holidayOptions = [
+    { value: 'NEW_YEAR', label: '元旦' },
+    { value: 'SPRING_FESTIVAL', label: '春节' },
+    { value: 'LABOR_DAY', label: '劳动节' },
+    { value: 'DRAGON_BOAT', label: '端午节' },
+    { value: 'QIXI', label: '七夕节' },
+    { value: 'MID_AUTUMN', label: '中秋节' },
+    { value: 'NATIONAL_DAY', label: '国庆节' }
+  ]
   let dishSearchSeq = 0
   let storeSearchSeq = 0
   let stackSearchSeq = 0
@@ -314,6 +338,8 @@
     dishIds: [] as string[],
     storeIds: [] as string[],
     useWeekdays: [] as number[],
+    unavailableDates: [] as string[],
+    unavailableHolidays: [] as string[],
     useStartTime: '' as string,
     useEndTime: '' as string,
     startTime: '',
@@ -327,6 +353,8 @@
     switch (formData.type) {
       case 0:
         return '满减金额'
+      case 4:
+        return '代金券面值'
       case 1:
       case 3:
         return '折扣率'
@@ -341,6 +369,8 @@
     switch (formData.type) {
       case 0:
         return '元，满足最低消费后直接减免'
+      case 4:
+        return '元，直接抵扣；最低消费填 0 即无门槛'
       case 1:
       case 3:
         return '，如 0.85 表示 85 折'
@@ -389,7 +419,7 @@
     }, trigger: 'change' }]
   }
 
-  // 类型改变时重置面值（与后端 0-满减 1-整单折扣 2-菜品免单 一致）
+  // 类型改变时重置面值与不适用的菜品范围。
   const handleTypeChange = (type: number) => {
     if (type === 1 || type === 3) {
       formData.value = 0.9
@@ -398,7 +428,7 @@
     } else {
       formData.value = 10
     }
-    if (![2, 3].includes(type)) formData.dishIds = []
+    if (![2, 3, 4].includes(type)) formData.dishIds = []
   }
 
   // 初始化表单数据
@@ -428,6 +458,8 @@
       dishIds: isEdit ? (row?.dishItems || []).map((item) => String(item.dishId)) : [],
       storeIds: isEdit ? (row?.storeIds || '').split(',').filter(Boolean) : [],
       useWeekdays: isEdit ? (row?.useWeekdays || '').split(',').filter(Boolean).map(Number) : [],
+      unavailableDates: isEdit ? (row?.unavailableDates || '').split(',').filter(Boolean) : [],
+      unavailableHolidays: isEdit ? (row?.unavailableHolidays || '').split(',').filter(Boolean) : [],
       useStartTime: isEdit ? row?.useStartTime || '' : '',
       useEndTime: isEdit ? row?.useEndTime || '' : '',
       startTime: isEdit ? row?.startTime || '' : '',
@@ -447,6 +479,8 @@
           formData.dishIds = (detail.dishItems || []).map((item) => String(item.dishId))
           formData.storeIds = (detail.storeIds || '').split(',').filter(Boolean)
           formData.useWeekdays = (detail.useWeekdays || '').split(',').filter(Boolean).map(Number)
+          formData.unavailableDates = (detail.unavailableDates || '').split(',').filter(Boolean)
+          formData.unavailableHolidays = (detail.unavailableHolidays || '').split(',').filter(Boolean)
           formData.useStartTime = detail.useStartTime || ''
           formData.useEndTime = detail.useEndTime || ''
           formData.startTime = detail.startTime || ''
@@ -503,9 +537,11 @@
       value: typeNum === 2 ? 0 : Number(formData.value),
       minAmount: formData.minAmount ?? 0,
       totalCount: dialogType.value === 'add' ? formData.totalCount : undefined,
-      dishItems: [2, 3].includes(typeNum) ? formData.dishIds.map((dishId) => ({ dishId })) : [],
+      dishItems: [2, 3, 4].includes(typeNum) ? formData.dishIds.map((dishId) => ({ dishId })) : [],
       storeIds: formData.storeIds.join(','),
       useWeekdays: formData.useWeekdays.join(','),
+      unavailableDates: (formData.unavailableDates || []).join(','),
+      unavailableHolidays: (formData.unavailableHolidays || []).join(','),
       useStartTime: formData.useStartTime || undefined,
       useEndTime: formData.useEndTime || undefined,
       startTime: formData.startTime || undefined,
