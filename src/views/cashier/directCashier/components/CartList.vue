@@ -88,6 +88,7 @@
               </div>
               <div class="item-footer">
                 <div class="subtotal">
+                  <span class="unit-price">单价 ￥{{ formatMoney(getUnitListPrice(item)) }}</span>
                   <span class="subtotal-price" :class="{ 'gift-price': item.isGift }">
                     <template v-if="item.isGift">￥0.00（赠）</template>
                     <template v-else-if="hasItemDiscount(item)">
@@ -191,6 +192,11 @@
       return Number(item.totalPrice) + Number(item.discountPrice)
     }
     return (item.price ?? 0) * (item.number ?? 0)
+  }
+
+  const getUnitListPrice = (item: any) => {
+    if (item.unitListPrice != null) return Number(item.unitListPrice)
+    return getLineOriginalTotal(item) / (Number(item.number) || 1)
   }
 
   const getLinePayTotal = (item: any) => {
@@ -402,8 +408,15 @@
       justify-content: space-between;
 
       .subtotal {
+        display: flex;
+        flex-direction: column;
         font-size: 13px;
         color: var(--el-text-color-regular);
+
+        .unit-price {
+          font-size: 11px;
+          color: var(--el-text-color-secondary);
+        }
 
         .subtotal-price {
           font-size: 15px;

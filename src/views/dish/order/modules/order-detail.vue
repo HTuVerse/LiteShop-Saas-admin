@@ -166,7 +166,7 @@
                   </div>
                 </template>
                 <template #price="{ row }">
-                  <span v-if="row.kind === 'item'">¥ {{ formatMoney(row.item.price) }}</span>
+                  <span v-if="row.kind === 'item'">¥ {{ formatMoney(row.item.unitListPrice ?? row.item.unitSellingPrice) }}</span>
                 </template>
                 <template #quantity="{ row }">
                   <span v-if="row.kind === 'item'">{{ row.item.quantity }} 份</span>

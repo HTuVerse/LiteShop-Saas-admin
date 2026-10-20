@@ -183,7 +183,7 @@ export function normalizeOrderItemForCart(item: any): any {
       (Number.isFinite(unitSellingPrice) ? unitSellingPrice * safeQuantity : 0)
   )
   const discountAmount = Number(item.discountAmount ?? item.discountPrice ?? 0)
-  const unitListPrice = Number(item.unitListPrice)
+  const unitListPrice = item.unitListPrice == null ? NaN : Number(item.unitListPrice)
   const lineListAmount = Number(
     item.lineListAmount ??
       (Number.isFinite(unitListPrice)
@@ -207,6 +207,7 @@ export function normalizeOrderItemForCart(item: any): any {
     submittedByName: item.submittedByName,
     dishName: item.dishName,
     price: safeUnitSellingPrice,
+    unitListPrice: Number.isFinite(unitListPrice) ? unitListPrice : safeLineListAmount / safeQuantity,
     number: safeQuantity,
     lineListAmount: safeLineListAmount,
     lineDiscountAmount: safeDiscountAmount,
