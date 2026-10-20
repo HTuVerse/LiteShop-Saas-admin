@@ -184,10 +184,12 @@
         | null
       if (requestId !== orderRequestId) return
       if (res && res.id) {
+        const previousOrderId = currentOrderId.value
         const isOnline = ['线上支付', 'ONLINE', '1'].includes(String(res.paymentMode || ''))
         onlinePending.value = isOnline && !['已支付', '1'].includes(String(res.paymentStatus || ''))
         sessionHasOrder.value = true
         currentOrderId.value = onlinePending.value ? null : res.id
+        if (String(previousOrderId ?? '') !== String(currentOrderId.value ?? '')) cart.note = ''
         if (onlinePending.value) cart.commodity = []
         if (res.userId && String(member.value?.id) !== String(res.userId)) {
           try {
@@ -207,7 +209,6 @@
           : [...list.map(normalizeOrderItemForCart), ...unsubmitted]
         if (list.length > 0) {
           cart.discountRate = res.discountRate ?? null
-          cart.note = res.note || ''
           cart.uuid = generateUUID()
           cart.sessionNo = props.session.sessionNo
           if (!silent) ElMessage.success('订单数据加载成功')
@@ -686,6 +687,7 @@
         sessionHasOrder.value = true
         if (createRes?.id) currentOrderId.value = createRes.id
         ElMessage.success('订单已提交，可继续加菜或点击「结算」收银')
+        cart.note = ''
         cart.commodity = cart.commodity.filter((item: any) => item.fromOrder === true)
         await loadTableOrder()
       } else if (existingOrderId) {
@@ -700,6 +702,7 @@
             note: cart.note || ''
           })
           ElMessage.success('加菜成功，可继续加菜或点击「结算」收银')
+          cart.note = ''
           cart.commodity = cart.commodity.filter((item: any) => item.fromOrder === true)
           await loadTableOrder()
         } else {

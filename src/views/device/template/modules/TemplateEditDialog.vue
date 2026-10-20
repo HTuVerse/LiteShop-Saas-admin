@@ -53,6 +53,15 @@
               <ElFormItem label="打印联数" prop="printCopies">
                 <ElInputNumber v-model="formData.printCopies" :min="1" :max="5" />
               </ElFormItem>
+              <ElFormItem label="出单方式" prop="itemTicketMode">
+                <ElRadioGroup v-model="formData.itemTicketMode">
+                  <ElRadio :value="0">整批一张</ElRadio>
+                  <ElRadio :value="1">每菜一张</ElRadio>
+                </ElRadioGroup>
+                <div class="form-tip">
+                  每菜一张时，菜品 A × 3 只打印一张，并在票上显示数量 3；每张仍遵循打印联数设置。
+                </div>
+              </ElFormItem>
 
               <ElFormItem label="备注说明" prop="remark">
                 <ElInput
@@ -436,6 +445,7 @@
     fontSize: 0,
     printDensity: 8,
     printCopies: 1,
+    itemTicketMode: 0,
     isDefault: 0,
     enabled: 1,
     remark: ''
@@ -551,6 +561,7 @@
       fontSize: 0,
       printDensity: 8,
       printCopies: 1,
+      itemTicketMode: 0,
       isDefault: 0,
       enabled: 1,
       remark: ''
@@ -649,6 +660,12 @@
 </script>
 
 <style scoped lang="scss">
+  .form-tip {
+    color: var(--el-text-color-secondary);
+    font-size: 12px;
+    line-height: 1.5;
+  }
+
   .template-dialog-content {
     display: flex;
     gap: 20px;

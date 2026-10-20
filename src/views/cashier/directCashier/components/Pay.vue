@@ -97,7 +97,6 @@
       </section>
 
       <footer class="pay-footer">
-        <ElCheckbox v-model="printReceipt">支付完成打印小票</ElCheckbox>
         <div class="footer-actions">
           <ElButton size="large" @click="handleCancel">取消</ElButton>
           <ElButton
@@ -118,7 +117,7 @@
 
 <script setup lang="ts">
   import { ref, computed, watch, inject, nextTick } from 'vue'
-  import { ElDialog, ElButton, ElCheckbox, ElInput, ElAlert, ElMessage } from 'element-plus'
+  import { ElDialog, ElButton, ElInput, ElAlert, ElMessage } from 'element-plus'
   import { formatMoney } from '@/utils/cashier/utils'
   import {
     fetchCashierDirectOrder,
@@ -249,9 +248,6 @@
     return `${discount}折`
   })
 
-  // 是否打印小票
-  const printReceipt = ref(true)
-
   // 加载状态
   const payLoading = ref(false)
   // 网络重试复用同一个键，避免余额/现金重复收款生成两笔订单。
@@ -378,7 +374,7 @@
           }
         }),
         note: cart.note || '',
-        printReceipt: printReceipt.value
+        printReceipt: false
       }
       let res: any
       if (props.sessionNo) {
@@ -389,7 +385,7 @@
           userId: cart.member.id,
           discountRate: cart.discountRate ?? undefined,
           note: cart.note || undefined,
-          printReceipt: printReceipt.value
+          printReceipt: false
         })
       } else {
         res = await fetchCashierDirectOrder(orderData)
@@ -481,7 +477,7 @@
         authCode: code,
         cartItems: buildCartItems(),
         note: cart.note || '',
-        printReceipt: printReceipt.value
+        printReceipt: false
       })
       const order = res?.order || res
       if (!order?.id) {
@@ -575,7 +571,7 @@
           }
         }),
         note: cart.note || '',
-        printReceipt: printReceipt.value
+        printReceipt: false
       }
 
       let res: any
@@ -587,7 +583,7 @@
           actualAmount: actualPayment.value,
           discountRate: cart.discountRate ?? undefined,
           note: cart.note || undefined,
-          printReceipt: printReceipt.value
+          printReceipt: false
         })
       } else {
         // 无桌位：直接下单并已支付

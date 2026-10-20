@@ -3,7 +3,7 @@
     <ElAlert v-if="error" :title="error" type="error" :closable="false" show-icon />
     <div class="preview-paper" :class="templateData.paperWidth === 1 ? 'paper-80mm' : 'paper-58mm'">
       <div class="preview-caption"
-        >演示订单 · 正式打印内容 · {{ templateData.printCopies || 1 }} 联</div
+        >演示订单 · {{ templateData.itemTicketMode === 1 ? '每菜一张（示例菜品 × 2）' : '整批一张' }} · {{ templateData.printCopies || 1 }} 联</div
       >
       <div v-if="loading && !content" class="preview-state">正在生成预览…</div>
       <div v-else-if="content" class="print-content" v-html="renderedContent"></div>

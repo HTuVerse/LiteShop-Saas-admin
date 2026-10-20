@@ -52,7 +52,7 @@
         <div class="btn-label">退菜</div>
       </div>
 
-      <!-- 预估单打印（仅桌位会话模式，有订单时可用） -->
+      <!-- 打印预结单（仅桌位会话模式，有订单时可用） -->
       <div
         v-if="tableInfo"
         class="function-btn"
@@ -62,7 +62,7 @@
         <div class="btn-icon"
           ><ElIcon><Printer /></ElIcon
         ></div>
-        <div class="btn-label">预估单打印</div>
+        <div class="btn-label">打印预结单</div>
       </div>
 
       <!-- 核销优惠券 -->
@@ -168,7 +168,7 @@
   const receiptPrintVisible = ref(false)
   const receiptPrintOrderId = ref<number | null>(null)
   const receiptPrintStoreId = ref<number | null>(null)
-  const receiptPrintTitle = ref('预估单打印')
+  const receiptPrintTitle = ref('打印预结单')
   const verifyCouponVisible = ref(false)
 
   const discountText = computed(() => {
@@ -194,7 +194,7 @@
       ElMessage.warning('请先提交订单')
       return
     }
-    receiptPrintTitle.value = '预估单打印'
+    receiptPrintTitle.value = '打印预结单'
     receiptPrintOrderId.value = currentOrderId.value
     receiptPrintStoreId.value = tableInfo?.table?.storeId ?? null
     receiptPrintVisible.value = true
