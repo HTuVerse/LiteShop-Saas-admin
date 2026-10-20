@@ -1,22 +1,32 @@
 <template>
   <div class="cart-member">
     <div v-if="member && !editing" class="member-info">
-      <ElAvatar :size="44" :src="member.avatar || member.portrait">
-        {{ memberName.charAt(0) }}
-      </ElAvatar>
-      <div class="info">
-        <div class="nickname">{{ memberName }}</div>
-        <div class="phone">{{ member.phone || member.cellphone || '-' }}</div>
-        <div class="member-assets">
-          <span>等级：{{ memberLevel }}</span>
-          <span>积分：{{ memberPoints }}</span>
+      <div class="member-header">
+        <ElAvatar class="member-avatar" :size="48" :src="member.avatar || member.portrait">
+          {{ memberName.charAt(0) }}
+        </ElAvatar>
+        <div class="member-identity">
+          <div class="member-headline">
+            <strong class="nickname" :title="memberName">{{ memberName }}</strong>
+            <span class="level-badge">{{ memberLevel }}</span>
+          </div>
+          <span class="phone">手机号：{{ member.phone || member.cellphone || '未绑定' }}</span>
         </div>
-        <div class="balance">余额：￥{{ formatMoney(memberBalance) }}</div>
+        <div v-if="!memberLocked" class="member-actions">
+          <ElButton plain size="small" @click="startEditing">更换</ElButton>
+          <ElButton type="danger" text size="small" @click="handleClear">清除</ElButton>
+        </div>
       </div>
-      <ElButton v-if="!memberLocked" plain size="small" @click="startEditing">更换</ElButton>
-      <ElButton v-if="!memberLocked" type="danger" text size="small" @click="handleClear"
-        >清除</ElButton
-      >
+      <div class="member-stats">
+        <div class="member-stat">
+          <span>积分</span>
+          <strong>{{ memberPoints }}</strong>
+        </div>
+        <div class="member-stat balance-stat">
+          <span>会员余额</span>
+          <strong>￥{{ formatMoney(memberBalance) }}</strong>
+        </div>
+      </div>
     </div>
 
     <div v-else-if="!memberLocked" class="member-lookup">
@@ -36,19 +46,13 @@
       <ElButton v-if="member" text @click="editing = false">取消</ElButton>
     </div>
 
-    <div v-if="!tableInfo" class="member-benefit">
-      <ElIcon><TrophyBase /></ElIcon>
-      <span>{{
-        member ? '会员权益已生效，本单可享会员优惠' : '输入手机号加载会员，可使用积分与余额'
-      }}</span>
-    </div>
   </div>
 </template>
 
 <script setup lang="ts">
   import { computed, inject, nextTick, ref } from 'vue'
-  import { ElAvatar, ElButton, ElIcon, ElInput, ElMessage } from 'element-plus'
-  import { Iphone, TrophyBase, User } from '@element-plus/icons-vue'
+  import { ElAvatar, ElButton, ElInput, ElMessage } from 'element-plus'
+  import { Iphone, User } from '@element-plus/icons-vue'
   import { fetchCashierMemberByPhone } from '@/api/cashier'
   import { formatMoney } from '@utils/cashier/utils'
 
@@ -67,13 +71,10 @@
   const memberBalance = computed(() =>
     Number(member.value?.surplusMoney ?? member.value?.balance ?? 0)
   )
-  const memberLevel = computed(
-    () =>
-      (member.value?.levelName && member.value?.level != null
-        ? `${member.value.levelName}（编码 ${member.value.level}）`
-        : member.value?.levelName) ||
-      (member.value?.level != null ? `等级编码 ${member.value.level}` : '未设置')
-  )
+  const memberLevel = computed(() => {
+    const name = String(member.value?.levelName || '').trim()
+    return name && !/^\d+$/.test(name) ? name : '未设置等级'
+  })
   const memberPoints = computed(() => Number(member.value?.points ?? 0))
 
   const startEditing = () => {
@@ -128,26 +129,43 @@
 
 <style scoped lang="scss">
   .cart-member {
-    padding-bottom: 5px;
-    margin-bottom: 6px;
+    flex-shrink: 0;
+    margin-bottom: 10px;
   }
 
-  .member-info,
-  .member-lookup {
+  .member-info {
+    padding: 12px 14px;
+    background: linear-gradient(135deg, #fffaf2, var(--el-fill-color-blank));
+    border: 1px solid #f1e6d2;
+    border-radius: 12px;
+  }
+
+  .member-header {
     display: flex;
-    gap: 8px;
+    flex-wrap: wrap;
+    gap: 10px;
     align-items: center;
-    min-height: 42px;
-    padding: 2px;
   }
 
-  .member-info .info {
+  .member-avatar {
+    flex-shrink: 0;
+  }
+
+  .member-identity {
     flex: 1;
-    min-width: 0;
+    min-width: 150px;
+  }
+
+  .member-headline {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 7px;
+    align-items: center;
+    margin-bottom: 4px;
   }
 
   .nickname {
-    margin-bottom: 3px;
+    max-width: 100%;
     overflow: hidden;
     font-size: 14px;
     font-weight: 600;
@@ -156,20 +174,77 @@
     white-space: nowrap;
   }
 
-  .phone,
-  .member-assets,
-  .balance {
+  .level-badge {
+    flex-shrink: 0;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #8b5b19;
+    background: #f8e8c9;
+    border-radius: 99px;
+  }
+
+  .phone {
     font-size: 12px;
     color: var(--el-text-color-secondary);
   }
 
-  .member-assets {
+  .member-actions {
     display: flex;
-    gap: 10px;
+    flex-shrink: 0;
+    gap: 2px;
+    align-items: center;
+    margin-left: auto;
+
+    :deep(.el-button + .el-button) {
+      margin-left: 0;
+    }
   }
 
-  .balance {
+  .member-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    padding-top: 12px;
+    margin-top: 12px;
+    border-top: 1px solid #f1e6d2;
+  }
+
+  .member-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    padding-left: 12px;
+
+    &:first-child {
+      padding-left: 0;
+      border-right: 1px solid #f1e6d2;
+    }
+
+    > span {
+      font-size: 12px;
+      color: var(--el-text-color-secondary);
+    }
+
+    > strong {
+      overflow: hidden;
+      font-size: 18px;
+      color: var(--el-text-color-primary);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+
+  .balance-stat > strong {
     color: var(--el-color-danger);
+  }
+
+  .member-lookup {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    min-height: 42px;
+    padding: 2px;
   }
 
   .member-lookup :deep(.el-input) {
@@ -177,27 +252,20 @@
     min-width: 120px;
   }
 
-  .member-benefit {
-    display: flex;
-    gap: 7px;
-    align-items: center;
-    min-height: 30px;
-    padding: 0 10px;
-    margin-top: 5px;
-    font-size: 11px;
-    color: #b66316;
-    background: linear-gradient(90deg, #fff4df, #fff8ed);
-    border: 1px solid #ffe7bf;
-    border-radius: 8px;
-
-    > .el-icon {
-      flex-shrink: 0;
-      font-size: 16px;
-      color: #ed971d;
-    }
-  }
-
   @media (width <= 540px) {
+    .member-header {
+      flex-wrap: wrap;
+    }
+
+    .member-actions {
+      width: 100%;
+      justify-content: flex-end;
+    }
+
+    .member-info {
+      padding: 10px;
+    }
+
     .member-lookup {
       flex-wrap: wrap;
     }
