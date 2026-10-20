@@ -2,12 +2,12 @@
   <div class="cart-member">
     <div v-if="member && !editing" class="member-info">
       <div class="member-header">
-        <ElAvatar class="member-avatar" :size="48" :src="member.avatar || member.portrait">
+        <ElAvatar class="member-avatar" :size="38" :src="member.avatar || member.portrait">
           {{ memberName.charAt(0) }}
         </ElAvatar>
         <div class="member-identity">
           <div class="member-headline">
-            <strong class="nickname" :title="memberName">{{ memberName }}</strong>
+            <strong class="nickname">{{ displayMemberName }}</strong>
             <span class="level-badge">{{ memberLevel }}</span>
           </div>
           <span class="phone">手机号：{{ member.phone || member.cellphone || '未绑定' }}</span>
@@ -68,6 +68,10 @@
   const memberName = computed(
     () => member.value?.username || member.value?.nickname || `会员${member.value?.id || ''}`
   )
+  const displayMemberName = computed(() => {
+    const characters = Array.from(String(memberName.value))
+    return characters.length > 15 ? `${characters.slice(0, 15).join('')}...` : memberName.value
+  })
   const memberBalance = computed(() =>
     Number(member.value?.surplusMoney ?? member.value?.balance ?? 0)
   )
@@ -130,20 +134,20 @@
 <style scoped lang="scss">
   .cart-member {
     flex-shrink: 0;
-    margin-bottom: 10px;
+    margin-bottom: 6px;
   }
 
   .member-info {
-    padding: 12px 14px;
+    padding: 8px 10px;
     background: linear-gradient(135deg, #fffaf2, var(--el-fill-color-blank));
     border: 1px solid #f1e6d2;
-    border-radius: 12px;
+    border-radius: 10px;
   }
 
   .member-header {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
+    display: grid;
+    grid-template-columns: 38px minmax(0, 1fr) auto;
+    gap: 8px;
     align-items: center;
   }
 
@@ -152,22 +156,21 @@
   }
 
   .member-identity {
-    flex: 1;
-    min-width: 150px;
+    min-width: 0;
   }
 
   .member-headline {
     display: flex;
-    flex-wrap: wrap;
-    gap: 4px 7px;
+    gap: 4px;
     align-items: center;
-    margin-bottom: 4px;
+    min-width: 0;
+    margin-bottom: 2px;
   }
 
   .nickname {
-    max-width: 100%;
+    min-width: 0;
     overflow: hidden;
-    font-size: 14px;
+    font-size: 12px;
     font-weight: 600;
     color: var(--el-text-color-primary);
     text-overflow: ellipsis;
@@ -176,8 +179,8 @@
 
   .level-badge {
     flex-shrink: 0;
-    padding: 2px 8px;
-    font-size: 11px;
+    padding: 1px 6px;
+    font-size: 10px;
     font-weight: 600;
     color: #8b5b19;
     background: #f8e8c9;
@@ -185,16 +188,25 @@
   }
 
   .phone {
-    font-size: 12px;
+    display: block;
+    overflow: hidden;
+    font-size: 11px;
     color: var(--el-text-color-secondary);
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .member-actions {
     display: flex;
     flex-shrink: 0;
-    gap: 2px;
+    gap: 0;
     align-items: center;
-    margin-left: auto;
+
+    :deep(.el-button) {
+      height: 26px;
+      padding: 4px 7px;
+      font-size: 11px;
+    }
 
     :deep(.el-button + .el-button) {
       margin-left: 0;
@@ -204,17 +216,17 @@
   .member-stats {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    padding-top: 12px;
-    margin-top: 12px;
+    padding-top: 7px;
+    margin-top: 7px;
     border-top: 1px solid #f1e6d2;
   }
 
   .member-stat {
     display: flex;
-    flex-direction: column;
-    gap: 2px;
+    gap: 6px;
+    align-items: baseline;
     min-width: 0;
-    padding-left: 12px;
+    padding-left: 8px;
 
     &:first-child {
       padding-left: 0;
@@ -222,13 +234,14 @@
     }
 
     > span {
-      font-size: 12px;
+      flex-shrink: 0;
+      font-size: 11px;
       color: var(--el-text-color-secondary);
     }
 
     > strong {
       overflow: hidden;
-      font-size: 18px;
+      font-size: 14px;
       color: var(--el-text-color-primary);
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -253,19 +266,6 @@
   }
 
   @media (width <= 540px) {
-    .member-header {
-      flex-wrap: wrap;
-    }
-
-    .member-actions {
-      width: 100%;
-      justify-content: flex-end;
-    }
-
-    .member-info {
-      padding: 10px;
-    }
-
     .member-lookup {
       flex-wrap: wrap;
     }
