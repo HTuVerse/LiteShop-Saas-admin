@@ -5,7 +5,7 @@
 <template>
   <div
     class="art-table"
-    :class="{ 'is-empty': isEmpty }"
+    :class="{ 'is-empty': isEmpty, 'fixed-pagination': fixedPagination }"
     :style="$slots.default ? { height: 'auto' } : containerHeight"
   >
     <ElTable ref="elTableRef" v-loading="!!loading" v-bind="mergedTableProps">
@@ -132,6 +132,8 @@
     pagination?: PaginationConfig
     /** 分页配置 */
     paginationOptions?: PaginationOptions
+    /** 表格内容滚动且分页器固定在容器底部，空数据时仍显示 */
+    fixedPagination?: boolean
     /** 空数据表格高度 */
     emptyHeight?: string
     /** 空数据时显示的文本 */
@@ -279,7 +281,9 @@
   }))
 
   // 是否显示分页器
-  const showPagination = computed(() => props.pagination && !isEmpty.value)
+  const showPagination = computed(
+    () => props.pagination && (props.fixedPagination || !isEmpty.value)
+  )
 
   // Element Plus 在部分场景会先用 $index = -1 进行预渲染。
   // 这对普通展示无影响，但会让 ElForm 错误注册出 lineList.-1.xxx 这类字段。

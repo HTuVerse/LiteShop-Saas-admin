@@ -2,17 +2,32 @@
   <div class="resource-page">
     <div class="resource-layout">
       <aside class="folder-panel">
-        <div class="folder-heading"><span>{{ isPlatform ? '租户资源库' : '可访问的资源库' }}</span></div>
+        <div class="folder-heading"
+          ><span>{{ isPlatform ? '租户资源库' : '可访问的资源库' }}</span></div
+        >
         <nav class="folder-list" aria-label="租户资源库">
-          <button v-for="root in rootOptions" :key="root.tenantId" class="folder-item"
-            :class="{ active: selectedRootId === root.tenantId }" @click="selectRoot(root.tenantId)">
-            <img class="folder-asset" :src="folderBlueIcon" alt="" /><span class="folder-name">{{ !isPlatform && root.tenantId === ownTenantId ? '我的资源' : root.name }}</span>
+          <button
+            v-for="root in rootOptions"
+            :key="root.tenantId"
+            class="folder-item"
+            :class="{ active: selectedRootId === root.tenantId }"
+            @click="selectRoot(root.tenantId)"
+          >
+            <img class="folder-asset" :src="folderBlueIcon" alt="" /><span class="folder-name">{{
+              !isPlatform && root.tenantId === ownTenantId ? '我的资源' : root.name
+            }}</span>
           </button>
         </nav>
         <div class="folder-divider" />
         <div class="folder-heading">
           <span>文件夹</span>
-          <ElButton v-if="canEdit" class="folder-add" text aria-label="新建文件夹" @click="createFolder()">
+          <ElButton
+            v-if="canEdit"
+            class="folder-add"
+            text
+            aria-label="新建文件夹"
+            @click="createFolder()"
+          >
             <ArtSvgIcon icon="ri:add-line" />
           </ElButton>
         </div>
@@ -49,7 +64,8 @@
                 folder.name
               }}</span>
             </button>
-            <ElDropdown v-if="isPlatform || (folder.myPermissions || 0) & 4"
+            <ElDropdown
+              v-if="isPlatform || (folder.myPermissions || 0) & 4"
               trigger="click"
               @command="(command: string) => folderCommand(command, folder)"
             >
@@ -59,9 +75,21 @@
               <template #dropdown>
                 <ElDropdownMenu>
                   <ElDropdownItem v-if="isPlatform" command="access">配置权限</ElDropdownItem>
-                  <ElDropdownItem v-if="isPlatform || (folder.myPermissions || 0) & 4" command="create-child">新建子文件夹</ElDropdownItem>
-                  <ElDropdownItem v-if="isPlatform || (folder.myPermissions || 0) & 4" command="rename">重命名</ElDropdownItem>
-                  <ElDropdownItem v-if="isPlatform || (folder.myPermissions || 0) & 4" command="delete">删除</ElDropdownItem>
+                  <ElDropdownItem
+                    v-if="isPlatform || (folder.myPermissions || 0) & 4"
+                    command="create-child"
+                    >新建子文件夹</ElDropdownItem
+                  >
+                  <ElDropdownItem
+                    v-if="isPlatform || (folder.myPermissions || 0) & 4"
+                    command="rename"
+                    >重命名</ElDropdownItem
+                  >
+                  <ElDropdownItem
+                    v-if="isPlatform || (folder.myPermissions || 0) & 4"
+                    command="delete"
+                    >删除</ElDropdownItem
+                  >
                 </ElDropdownMenu>
               </template>
             </ElDropdown>
@@ -77,7 +105,9 @@
             <span class="context-name">{{ currentFolderName }}</span>
             <span class="context-count">{{ pagination.total }} 项</span>
             <span v-if="capacityText" class="context-count">{{ capacityText }}</span>
-            <span v-if="!isPlatform && currentRoot" class="context-count">{{ permissionLabel(currentPermissions) || '仅开放指定文件夹' }}</span>
+            <span v-if="!isPlatform && currentRoot" class="context-count">{{
+              permissionLabel(currentPermissions) || '仅开放指定文件夹'
+            }}</span>
           </div>
           <div class="primary-actions">
             <ElSelect
@@ -97,7 +127,12 @@
             <ElButton v-if="canEdit" @click="createFolder()"
               ><ArtSvgIcon icon="ri:folder-add-line" />新建文件夹</ElButton
             >
-            <ElButton v-if="canUpload" type="primary" :loading="uploading" @click="fileInput?.click()">
+            <ElButton
+              v-if="canUpload"
+              type="primary"
+              :loading="uploading"
+              @click="fileInput?.click()"
+            >
               <ArtSvgIcon v-if="!uploading" icon="ri:upload-cloud-2-line" />上传文件
             </ElButton>
             <input
@@ -161,12 +196,14 @@
               <div class="batch-toolbar">
                 <div class="batch-actions">
                   <span class="selected-count">已选择 {{ selected.length }} 项</span>
-                  <ElButton v-if="isPlatform || selected.some(canEditFile)"
+                  <ElButton
+                    v-if="isPlatform || selected.some(canEditFile)"
                     :disabled="!selected.length || !selected.every(canEditFile)"
                     @click="openMove(selected.map((item) => item.id))"
                     >批量移动</ElButton
                   >
-                  <ElButton v-if="isPlatform || selected.some(canEditFile)"
+                  <ElButton
+                    v-if="isPlatform || selected.some(canEditFile)"
                     :disabled="!selected.length || !selected.every(canEditFile)"
                     type="danger"
                     plain
@@ -190,6 +227,7 @@
                   :loading="loading"
                   :pagination="pagination"
                   :pagination-options="{ size: 'small' }"
+                  fixed-pagination
                   :show-table-header="false"
                   height="100%"
                   size="small"
@@ -245,7 +283,8 @@
                   <dt>上传者 ID</dt><dd>{{ activeFile.uploaderId || '未知' }}</dd> <dt>访问权限</dt
                   ><dd>{{ activeFile.visibility === 'PRIVATE' ? '私有' : '公开' }}</dd>
                   <template v-if="!isPlatform">
-                    <dt>可用操作</dt><dd>{{ permissionLabel(filePermissions(activeFile)) || '无' }}</dd>
+                    <dt>可用操作</dt
+                    ><dd>{{ permissionLabel(filePermissions(activeFile)) || '无' }}</dd>
                   </template>
                 </dl>
               </div>
@@ -293,9 +332,15 @@
       <ArtForm label-width="90px">
         <ElFormItem label="目标文件夹">
           <ElSelect v-model="moveFolderId" placeholder="未分类" style="width: 100%">
-            <ElOption v-if="isPlatform || (currentRoot?.myPermissions || 0) & 4" label="未分类" value="" />
             <ElOption
-              v-for="folder in folders.filter((item) => isPlatform || (item.myPermissions || 0) & 4)"
+              v-if="isPlatform || (currentRoot?.myPermissions || 0) & 4"
+              label="未分类"
+              value=""
+            />
+            <ElOption
+              v-for="folder in folders.filter(
+                (item) => isPlatform || (item.myPermissions || 0) & 4
+              )"
               :key="folder.id"
               :label="folder.name"
               :value="folder.id"
@@ -309,8 +354,14 @@
       </template>
     </ElDialog>
 
-    <ElDialog v-model="rootAccessVisible" :title="`资源库权限 · ${folderAccessTarget?.name || currentRoot?.name || ''}`" width="620px">
-      <p class="root-access-hint">当前目录的权限作用于未分类资源及继承它的子目录；子目录可单独覆盖。公开/私有访问设置仍单独生效。</p>
+    <ElDialog
+      v-model="rootAccessVisible"
+      :title="`资源库权限 · ${folderAccessTarget?.name || currentRoot?.name || ''}`"
+      width="620px"
+    >
+      <p class="root-access-hint"
+        >当前目录的权限作用于未分类资源及继承它的子目录；子目录可单独覆盖。公开/私有访问设置仍单独生效。</p
+      >
       <ArtForm label-width="100px">
         <ElFormItem label="开放范围">
           <ElSelect v-model="rootAccessForm.mode" style="width: 100%">
@@ -322,19 +373,36 @@
         </ElFormItem>
         <ElFormItem v-if="rootAccessForm.mode === 'ALL'" label="开放操作">
           <ElCheckboxGroup v-model="rootAccessForm.permissions">
-            <ElCheckbox v-for="item in permissionOptions" :key="item.value" :value="item.value">{{ item.label }}</ElCheckbox>
+            <ElCheckbox v-for="item in permissionOptions" :key="item.value" :value="item.value">{{
+              item.label
+            }}</ElCheckbox>
           </ElCheckboxGroup>
         </ElFormItem>
         <ElFormItem v-if="rootAccessForm.mode === 'SELECTED'" label="授权租户">
-          <ElSelect v-model="rootAccessForm.tenants" multiple filterable style="width: 100%" placeholder="请选择租户">
-            <ElOption v-for="root in tenantRootOptions" :key="root.tenantId" :value="root.tenantId" :label="root.name" />
+          <ElSelect
+            v-model="rootAccessForm.tenants"
+            multiple
+            filterable
+            style="width: 100%"
+            placeholder="请选择租户"
+          >
+            <ElOption
+              v-for="root in tenantRootOptions"
+              :key="root.tenantId"
+              :value="root.tenantId"
+              :label="root.name"
+            />
           </ElSelect>
         </ElFormItem>
         <div v-if="rootAccessForm.mode === 'SELECTED'" class="grant-list">
           <div v-for="tenantId in rootAccessForm.tenants" :key="tenantId" class="grant-row">
-            <strong>{{ tenantRootOptions.find((root) => root.tenantId === tenantId)?.name || tenantId }}</strong>
+            <strong>{{
+              tenantRootOptions.find((root) => root.tenantId === tenantId)?.name || tenantId
+            }}</strong>
             <ElCheckboxGroup v-model="rootGrantPermissions[tenantId]">
-              <ElCheckbox v-for="item in permissionOptions" :key="item.value" :value="item.value">{{ item.label }}</ElCheckbox>
+              <ElCheckbox v-for="item in permissionOptions" :key="item.value" :value="item.value">{{
+                item.label
+              }}</ElCheckbox>
             </ElCheckboxGroup>
           </div>
         </div>
@@ -417,25 +485,36 @@
 
   const userStore = useUserStore()
   const isPlatform = computed(() => userStore.isSuperAdmin && !userStore.activeTenant)
-  const ownTenantId = computed(() => String(userStore.activeTenant?.id || userStore.info.tenantId || '0'))
+  const ownTenantId = computed(() =>
+    String(userStore.activeTenant?.id || userStore.info.tenantId || '0')
+  )
   const selectedRootId = ref(isPlatform.value ? '0' : ownTenantId.value)
   const tenantRoots = ref<ResourceRoot[]>([])
   const rootOptions = computed<ResourceRoot[]>(() => tenantRoots.value)
-  const tenantRootOptions = computed(() => tenantRoots.value.filter((root) =>
-    root.tenantId !== '0' && root.tenantId !== selectedRootId.value))
-  const currentRoot = computed(() => rootOptions.value.find((root) => root.tenantId === selectedRootId.value))
-  const currentPermissions = computed(() => folderFilter.value && folderFilter.value !== '0'
-    ? folders.value.find((folder) => folder.id === folderFilter.value)?.myPermissions || 0
-    : currentRoot.value?.myPermissions || 0)
+  const tenantRootOptions = computed(() =>
+    tenantRoots.value.filter(
+      (root) => root.tenantId !== '0' && root.tenantId !== selectedRootId.value
+    )
+  )
+  const currentRoot = computed(() =>
+    rootOptions.value.find((root) => root.tenantId === selectedRootId.value)
+  )
+  const currentPermissions = computed(() =>
+    folderFilter.value && folderFilter.value !== '0'
+      ? folders.value.find((folder) => folder.id === folderFilter.value)?.myPermissions || 0
+      : currentRoot.value?.myPermissions || 0
+  )
   const canEdit = computed(() => Boolean(currentPermissions.value & 4))
   const canUpload = computed(() => Boolean(currentPermissions.value & 8))
-  const filePermissions = (file: ResourceFile) => file.folderId
-    ? folders.value.find((folder) => folder.id === file.folderId)?.myPermissions || 0
-    : currentRoot.value?.myPermissions || 0
+  const filePermissions = (file: ResourceFile) =>
+    file.folderId
+      ? folders.value.find((folder) => folder.id === file.folderId)?.myPermissions || 0
+      : currentRoot.value?.myPermissions || 0
   const canEditFile = (file: ResourceFile) => Boolean(filePermissions(file) & 4)
-  const permissionLabel = (bits: number) => [
-    bits & 1 && '查看', bits & 2 && '选用', bits & 4 && '编辑', bits & 8 && '上传'
-  ].filter(Boolean).join(' · ')
+  const permissionLabel = (bits: number) =>
+    [bits & 1 && '查看', bits & 2 && '选用', bits & 4 && '编辑', bits & 8 && '上传']
+      .filter(Boolean)
+      .join(' · ')
   const rootAccessVisible = ref(false)
   const permissionOptions = [
     { label: '查看', value: 'view', bit: 1 },
@@ -444,14 +523,26 @@
     { label: '上传', value: 'upload', bit: 8 }
   ]
   const folderAccessTarget = ref<NestedResourceFolder>()
-  const rootAccessForm = reactive({ mode: 'PRIVATE' as ResourceRoot['mode'] | 'INHERIT', permissions: [] as string[], tenants: [] as string[] })
+  const rootAccessForm = reactive({
+    mode: 'PRIVATE' as ResourceRoot['mode'] | 'INHERIT',
+    permissions: [] as string[],
+    tenants: [] as string[]
+  })
   const rootGrantPermissions = reactive<Record<string, string[]>>({})
-  watch(() => rootAccessForm.tenants, (ids) => {
-    for (const id of ids) rootGrantPermissions[id] ||= []
-  }, { deep: true })
-  const toKeys = (bits: number) => permissionOptions.filter((item) => (bits & item.bit) !== 0).map((item) => item.value)
+  watch(
+    () => rootAccessForm.tenants,
+    (ids) => {
+      for (const id of ids) rootGrantPermissions[id] ||= []
+    },
+    { deep: true }
+  )
+  const toKeys = (bits: number) =>
+    permissionOptions.filter((item) => (bits & item.bit) !== 0).map((item) => item.value)
   const toBits = (keys: string[]) => {
-    const bits = permissionOptions.reduce((sum, item) => sum | (keys.includes(item.value) ? item.bit : 0), 0)
+    const bits = permissionOptions.reduce(
+      (sum, item) => sum | (keys.includes(item.value) ? item.bit : 0),
+      0
+    )
     return bits & (2 | 4) ? bits | 1 : bits
   }
   async function loadRoots() {
@@ -474,7 +565,8 @@
     rootAccessForm.mode = root.mode
     rootAccessForm.permissions = toKeys(root.permissions)
     rootAccessForm.tenants = root.grants.map((grant) => grant.tenantId)
-    for (const grant of root.grants) rootGrantPermissions[grant.tenantId] = toKeys(grant.permissions)
+    for (const grant of root.grants)
+      rootGrantPermissions[grant.tenantId] = toKeys(grant.permissions)
     rootAccessVisible.value = true
   }
   async function openFolderAccess(folder: NestedResourceFolder) {
@@ -484,7 +576,8 @@
     rootAccessForm.mode = access.mode
     rootAccessForm.permissions = toKeys(access.permissions)
     rootAccessForm.tenants = access.grants.map((grant) => grant.tenantId)
-    for (const grant of access.grants) rootGrantPermissions[grant.tenantId] = toKeys(grant.permissions)
+    for (const grant of access.grants)
+      rootGrantPermissions[grant.tenantId] = toKeys(grant.permissions)
     rootAccessVisible.value = true
   }
   async function saveRootAccess() {
@@ -494,20 +587,32 @@
       const data = {
         mode: rootAccessForm.mode,
         permissions: toBits(rootAccessForm.permissions),
-        grants: rootAccessForm.tenants.map((tenantId) => ({ tenantId, permissions: toBits(rootGrantPermissions[tenantId] || []) }))
+        grants: rootAccessForm.tenants.map((tenantId) => ({
+          tenantId,
+          permissions: toBits(rootGrantPermissions[tenantId] || [])
+        }))
       }
       if (folderAccessTarget.value) await configureResourceFolder(folderAccessTarget.value.id, data)
-      else await configureResourceRoot(currentRoot.value.tenantId, { ...data, mode: data.mode as ResourceRoot['mode'] })
+      else
+        await configureResourceRoot(currentRoot.value.tenantId, {
+          ...data,
+          mode: data.mode as ResourceRoot['mode']
+        })
       await loadRoots()
       await loadFolders()
       search()
       rootAccessVisible.value = false
       ElMessage.success('目录权限已保存')
-    } finally { saving.value = false }
+    } finally {
+      saving.value = false
+    }
   }
   const capacityText = ref('')
   async function loadCapacity() {
-    if (selectedRootId.value !== ownTenantId.value || (userStore.isSuperAdmin && !userStore.activeTenant)) {
+    if (
+      selectedRootId.value !== ownTenantId.value ||
+      (userStore.isSuperAdmin && !userStore.activeTenant)
+    ) {
       capacityText.value = ''
       return
     }
@@ -542,9 +647,7 @@
     uploaderId: ''
   })
   const hiddenFilterCount = computed(() =>
-    userStore.isSuperAdmin
-      ? Number(Boolean(filters.uploaderId.trim()))
-      : 0
+    userStore.isSuperAdmin ? Number(Boolean(filters.uploaderId.trim())) : 0
   )
   const selected = ref<ResourceFile[]>([])
   const activeFileId = ref<string>()
@@ -712,17 +815,24 @@
                         default: () => [
                           h(ElDropdownItem, { command: 'preview' }, () => '预览'),
                           h(ElDropdownItem, { command: 'download' }, () => '下载'),
-                          ...((isPlatform.value || selectedRootId.value === ownTenantId.value)
-                            ? [h(ElDropdownItem, { command: 'usage' }, () => '查看引用')] : []),
+                          ...(isPlatform.value || selectedRootId.value === ownTenantId.value
+                            ? [h(ElDropdownItem, { command: 'usage' }, () => '查看引用')]
+                            : []),
                           ...(row.visibility === 'PRIVATE'
                             ? []
                             : [h(ElDropdownItem, { command: 'copy' }, () => '复制链接')]),
-                          ...(canEditFile(row) ? [
-                            h(ElDropdownItem, { command: 'rename' }, () => '重命名'),
-                            h(ElDropdownItem, { command: 'move' }, () => '移动到文件夹'),
-                            h(ElDropdownItem, { command: 'visibility' }, () => '切换公开/私有'),
-                            h(ElDropdownItem, { command: 'delete', divided: true }, () => '删除')
-                          ] : [])
+                          ...(canEditFile(row)
+                            ? [
+                                h(ElDropdownItem, { command: 'rename' }, () => '重命名'),
+                                h(ElDropdownItem, { command: 'move' }, () => '移动到文件夹'),
+                                h(ElDropdownItem, { command: 'visibility' }, () => '切换公开/私有'),
+                                h(
+                                  ElDropdownItem,
+                                  { command: 'delete', divided: true },
+                                  () => '删除'
+                                )
+                              ]
+                            : [])
                         ]
                       })
                   }
@@ -841,7 +951,12 @@
   }
 
   async function createFolder(parentId?: string) {
-    if (parentId ? !((folders.value.find((folder) => folder.id === parentId)?.myPermissions || 0) & 4) : !canEdit.value) return
+    if (
+      parentId
+        ? !((folders.value.find((folder) => folder.id === parentId)?.myPermissions || 0) & 4)
+        : !canEdit.value
+    )
+      return
     try {
       const { value } = await ElMessageBox.prompt('输入文件夹名称', '新建文件夹', {
         inputPattern: /\S/,
@@ -864,7 +979,10 @@
   }
   async function folderCommand(command: string, folder: NestedResourceFolder) {
     try {
-      if (command === 'access') { await openFolderAccess(folder); return }
+      if (command === 'access') {
+        await openFolderAccess(folder)
+        return
+      }
       if (command === 'create-child') {
         await createFolder(folder.id)
         return
@@ -973,13 +1091,19 @@
     const targets = ids.map((id) => rows.value.find((row) => row.id === id))
     if (!ids.length || targets.some((file) => !file || !canEditFile(file))) return
     moveIds.value = ids
-    moveFolderId.value = (currentRoot.value?.myPermissions || 0) & 4
-      ? '' : rows.value.find((row) => row.id === ids[0])?.folderId || ''
+    moveFolderId.value =
+      (currentRoot.value?.myPermissions || 0) & 4
+        ? ''
+        : rows.value.find((row) => row.id === ids[0])?.folderId || ''
     moveVisible.value = true
   }
   async function confirmMove() {
     if (!moveFolderId.value && !((currentRoot.value?.myPermissions || 0) & 4)) return
-    if (moveFolderId.value && !((folders.value.find((folder) => folder.id === moveFolderId.value)?.myPermissions || 0) & 4)) return
+    if (
+      moveFolderId.value &&
+      !((folders.value.find((folder) => folder.id === moveFolderId.value)?.myPermissions || 0) & 4)
+    )
+      return
     saving.value = true
     try {
       await moveResources(moveIds.value, moveFolderId.value || null, selectedRootId.value)
@@ -1120,15 +1244,15 @@
   }
 
   .grant-list {
-    margin-left: 100px;
     max-height: 260px;
+    margin-left: 100px;
     overflow-y: auto;
   }
 
   .root-access-hint {
     margin: 0 0 16px;
-    color: var(--el-text-color-secondary);
     font-size: 12px;
+    color: var(--el-text-color-secondary);
   }
 
   .grant-row {
@@ -1378,10 +1502,6 @@
     min-height: 0;
   }
 
-  .table-frame :deep(.art-table) {
-    height: 100% !important;
-  }
-
   .batch-actions {
     display: flex;
     flex-wrap: wrap;
@@ -1600,6 +1720,11 @@
 
     .resource-layout {
       grid-template-columns: 1fr;
+    }
+
+    .table-frame {
+      flex: none;
+      height: 420px;
     }
 
     .folder-panel {

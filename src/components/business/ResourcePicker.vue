@@ -5,61 +5,89 @@
     width="min(900px, 95vw)"
     @update:model-value="emit('update:modelValue', $event)"
   >
-    <ArtForm inline @submit.prevent="search">
-      <ElFormItem>
-        <ElSelect v-model="tenantId" placeholder="选择资源库" style="width: 180px" @change="changeRoot">
-          <ElOption v-for="root in roots" :key="root.tenantId" :label="root.name" :value="root.tenantId" />
-        </ElSelect>
-      </ElFormItem>
-      <ElFormItem>
-        <ElSelect
-          v-model="folderId"
-          clearable
-          placeholder="全部文件夹"
-          style="width: 180px"
-          @change="search"
+    <div class="picker-content">
+      <ArtForm inline @submit.prevent="search">
+        <ElFormItem>
+          <ElSelect
+            v-model="tenantId"
+            placeholder="选择资源库"
+            style="width: 180px"
+            @change="changeRoot"
+          >
+            <ElOption
+              v-for="root in roots"
+              :key="root.tenantId"
+              :label="root.name"
+              :value="root.tenantId"
+            />
+          </ElSelect>
+        </ElFormItem>
+        <ElFormItem>
+          <ElSelect
+            v-model="folderId"
+            clearable
+            placeholder="全部文件夹"
+            style="width: 180px"
+            @change="search"
+          >
+            <ElOption
+              v-for="folder in folderOptions"
+              :key="folder.id"
+              :label="folder.label"
+              :value="folder.id"
+              :disabled="folder.disabled"
+            />
+          </ElSelect>
+        </ElFormItem>
+        <ElFormItem><ElInput v-model="keyword" clearable placeholder="搜索资源名称" /></ElFormItem>
+        <ElButton type="primary" native-type="submit">搜索</ElButton>
+      </ArtForm>
+      <div v-if="roots.length" class="picker-table-frame">
+        <ArtTable
+          row-key="id"
+          :data="rows"
+          :columns="columns"
+          :loading="loading"
+          :pagination="pagination"
+          fixed-pagination
+          :show-table-header="false"
+          height="100%"
+          @pagination:size-change="handleSizeChange"
+          @pagination:current-change="handleCurrentChange"
         >
-          <ElOption
-            v-for="folder in folderOptions"
-            :key="folder.id"
-            :label="folder.label"
-            :value="folder.id"
-            :disabled="folder.disabled"
-          />
-        </ElSelect>
-      </ElFormItem>
-      <ElFormItem><ElInput v-model="keyword" clearable placeholder="搜索资源名称" /></ElFormItem>
-      <ElButton type="primary" native-type="submit">搜索</ElButton>
-    </ArtForm>
-    <ArtTable
-      v-if="roots.length"
-      row-key="id"
-      :data="rows"
-      :columns="columns"
-      :loading="loading"
-      :pagination="pagination"
-      @pagination:size-change="handleSizeChange"
-      @pagination:current-change="handleCurrentChange"
-    >
-      <template #preview="{ row }">
-        <ElImage v-if="isImage(row)" :src="imageUrl(row)" :preview-src-list="[imageUrl(row)]"
-          fit="cover" class="picker-thumb" preview-teleported>
-          <template #error><span class="picker-no-preview">暂无预览</span></template>
-        </ElImage>
-        <span v-else class="picker-no-preview">文件</span>
-      </template>
-      <template #choose="{ row }"
-        ><ElButton type="primary" text @click="choose(row)">选择</ElButton></template
-      >
-    </ArtTable>
-    <ElEmpty v-else description="暂无可选用的资源" />
+          <template #preview="{ row }">
+            <ElImage
+              v-if="isImage(row)"
+              :src="imageUrl(row)"
+              :preview-src-list="[imageUrl(row)]"
+              fit="cover"
+              class="picker-thumb"
+              preview-teleported
+            >
+              <template #error><span class="picker-no-preview">暂无预览</span></template>
+            </ElImage>
+            <span v-else class="picker-no-preview">文件</span>
+          </template>
+          <template #choose="{ row }"
+            ><ElButton type="primary" text @click="choose(row)">选择</ElButton></template
+          >
+        </ArtTable>
+      </div>
+      <ElEmpty v-else description="暂无可选用的资源" />
+    </div>
   </ElDialog>
 </template>
 
 <script setup lang="ts">
   import { computed, ref, watch } from 'vue'
   import { useTable } from '@/hooks/core/useTable'
-  import { listResources, listResourceFolders, listResourceRoots, type ResourceFile, type ResourceRoot } from '@/api/resource-library'
+  import {
+    listResources,
+    listResourceFolders,
+    listResourceRoots,
+    type ResourceFile,
+    type ResourceRoot
+  } from '@/api/resource-library'
   import { useUserStore } from '@/store/modules/user'
   import type { NestedResourceFolder } from '@/api/resource-folders'
 
@@ -80,8 +108,11 @@
     const result: { id: string; label: string; disabled: boolean }[] = []
     const visit = (parentId: string | null, depth: number) => {
       for (const folder of folders.value.filter((item) => (item.parentId || null) === parentId)) {
-        result.push({ id: folder.id, label: `${'　'.repeat(depth)}${folder.name}`,
-          disabled: !((folder.myPermissions || 0) & 2) })
+        result.push({
+          id: folder.id,
+          label: `${'　'.repeat(depth)}${folder.name}`,
+          disabled: !((folder.myPermissions || 0) & 2)
+        })
         visit(folder.id, depth + 1)
       }
     }
@@ -126,7 +157,9 @@
     async (open) => {
       if (open) {
         const available = await listResourceRoots()
-        roots.value = available.filter((root) => (root.myPermissions & 2) !== 0 || root.selectableFolders)
+        roots.value = available.filter(
+          (root) => (root.myPermissions & 2) !== 0 || root.selectableFolders
+        )
         if (!roots.value.some((root) => root.tenantId === tenantId.value))
           tenantId.value = roots.value[0]?.tenantId || ''
         await changeRoot()
@@ -155,19 +188,42 @@
     emit('update:modelValue', false)
   }
   function isImage(file: ResourceFile) {
-    return file.contentType?.startsWith('image/') || /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(file.originalFileName)
+    return (
+      file.contentType?.startsWith('image/') ||
+      /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(file.originalFileName)
+    )
   }
   function imageUrl(file: ResourceFile) {
-    return file.url || `${(import.meta.env.VITE_API_URL || '/api').replace(/\/$/, '')}/images/resource/${file.id}`
+    return (
+      file.url ||
+      `${(import.meta.env.VITE_API_URL || '/api').replace(/\/$/, '')}/images/resource/${file.id}`
+    )
   }
 </script>
 
 <style scoped>
+  .picker-content {
+    display: flex;
+    flex-direction: column;
+    height: min(600px, 68vh);
+    min-height: 320px;
+  }
+
+  .picker-content > :first-child {
+    flex: none;
+  }
+
+  .picker-table-frame {
+    flex: 1;
+    min-height: 0;
+  }
+
   .picker-thumb {
     width: 58px;
     height: 58px;
     border-radius: 6px;
   }
+
   .picker-no-preview {
     display: grid;
     place-items: center;
