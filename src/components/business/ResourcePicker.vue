@@ -7,6 +7,11 @@
   >
     <ArtForm inline @submit.prevent="search">
       <ElFormItem>
+        <ElSelect v-model="tenantId" placeholder="选择资源库" style="width: 180px" @change="changeRoot">
+          <ElOption v-for="root in roots" :key="root.tenantId" :label="root.name" :value="root.tenantId" />
+        </ElSelect>
+      </ElFormItem>
+      <ElFormItem>
         <ElSelect
           v-model="folderId"
           clearable
@@ -53,7 +58,8 @@
 <script setup lang="ts">
   import { computed, ref, watch } from 'vue'
   import { useTable } from '@/hooks/core/useTable'
-  import { listResources, listResourceFolders, type ResourceFile } from '@/api/resource-library'
+  import { listResources, listResourceFolders, listResourceRoots, type ResourceFile, type ResourceRoot } from '@/api/resource-library'
+  import { useUserStore } from '@/store/modules/user'
   import type { NestedResourceFolder } from '@/api/resource-folders'
 
   const props = withDefaults(defineProps<{ modelValue: boolean; imageOnly?: boolean }>(), {
@@ -64,6 +70,9 @@
     select: [file: ResourceFile]
   }>()
   const keyword = ref('')
+  const userStore = useUserStore()
+  const tenantId = ref(String(userStore.activeTenant?.id || userStore.info.tenantId || '0'))
+  const roots = ref<ResourceRoot[]>([])
   const folderId = ref('')
   const folders = ref<NestedResourceFolder[]>([])
   const folderOptions = computed(() => {
@@ -113,13 +122,33 @@
   watch(
     () => props.modelValue,
     async (open) => {
-      if (open) folders.value = await listResourceFolders()
+      if (open) {
+        const available = await listResourceRoots()
+        roots.value = [
+          ...(userStore.isSuperAdmin && !userStore.activeTenant
+            ? [{ tenantId: '0', name: '平台资源', mode: 'PRIVATE' as const, permissions: 0, grants: [], myPermissions: 15 }]
+            : []),
+          ...available
+        ].filter((root) => (root.myPermissions & 2) !== 0)
+        if (!roots.value.some((root) => root.tenantId === tenantId.value))
+          tenantId.value = roots.value[0]?.tenantId || ''
+        await changeRoot()
+      }
     }
   )
+  async function changeRoot() {
+    folderId.value = ''
+    folders.value = tenantId.value ? await listResourceFolders(tenantId.value) : []
+    search()
+  }
   function search() {
     replaceSearchParams({
       keyword: keyword.value || undefined,
-      folderId: folderId.value || undefined
+      folderId: folderId.value || undefined,
+      tenantId: tenantId.value || undefined,
+      purpose: 'SELECT',
+      visibility: 'PUBLIC',
+      type: props.imageOnly ? 'image' : undefined
     })
     getData()
   }

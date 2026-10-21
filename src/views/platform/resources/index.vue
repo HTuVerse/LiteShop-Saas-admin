@@ -2,9 +2,17 @@
   <div class="resource-page">
     <div class="resource-layout">
       <aside class="folder-panel">
+        <div class="folder-heading"><span>租户资源库</span></div>
+        <nav class="folder-list" aria-label="租户资源库">
+          <button v-for="root in rootOptions" :key="root.tenantId" class="folder-item"
+            :class="{ active: selectedRootId === root.tenantId }" @click="selectRoot(root.tenantId)">
+            <img class="folder-asset" :src="folderBlueIcon" alt="" /><span class="folder-name">{{ root.name }}</span>
+          </button>
+        </nav>
+        <div class="folder-divider" />
         <div class="folder-heading">
           <span>文件夹</span>
-          <ElButton class="folder-add" text aria-label="新建文件夹" @click="createFolder()">
+          <ElButton v-if="canEdit" class="folder-add" text aria-label="新建文件夹" @click="createFolder()">
             <ArtSvgIcon icon="ri:add-line" />
           </ElButton>
         </div>
@@ -40,7 +48,7 @@
                 folder.name
               }}</span>
             </button>
-            <ElDropdown
+            <ElDropdown v-if="canEdit"
               trigger="click"
               @command="(command: string) => folderCommand(command, folder)"
             >
@@ -80,10 +88,13 @@
             <ElButton v-if="userStore.isSuperAdmin" @click="storageConfigVisible = true"
               ><ArtSvgIcon icon="ri:settings-3-line" />存储配置</ElButton
             >
-            <ElButton @click="createFolder()"
+            <ElButton v-if="isPlatform && selectedRootId !== '0'" @click="openRootAccess"
+              ><ArtSvgIcon icon="ri:shield-keyhole-line" />根目录权限</ElButton
+            >
+            <ElButton v-if="canEdit" @click="createFolder()"
               ><ArtSvgIcon icon="ri:folder-add-line" />新建文件夹</ElButton
             >
-            <ElButton type="primary" :loading="uploading" @click="fileInput?.click()">
+            <ElButton v-if="canUpload" type="primary" :loading="uploading" @click="fileInput?.click()">
               <ArtSvgIcon v-if="!uploading" icon="ri:upload-cloud-2-line" />上传文件
             </ElButton>
             <input
@@ -128,9 +139,6 @@
                 </ElSelect>
               </ElFormItem>
               <ElFormItem v-if="userStore.isSuperAdmin" v-show="filtersExpanded" class="id-field">
-                <ElInput v-model="filters.tenantId" clearable placeholder="商户 ID" />
-              </ElFormItem>
-              <ElFormItem v-if="userStore.isSuperAdmin" v-show="filtersExpanded" class="id-field">
                 <ElInput v-model="filters.uploaderId" clearable placeholder="上传者 ID" />
               </ElFormItem>
               <ElButton class="expand-button" @click="filtersExpanded = !filtersExpanded">
@@ -150,12 +158,12 @@
               <div class="batch-toolbar">
                 <div class="batch-actions">
                   <span class="selected-count">已选择 {{ selected.length }} 项</span>
-                  <ElButton
+                  <ElButton v-if="canEdit"
                     :disabled="!selected.length"
                     @click="openMove(selected.map((item) => item.id))"
                     >批量移动</ElButton
                   >
-                  <ElButton
+                  <ElButton v-if="canEdit"
                     :disabled="!selected.length"
                     type="danger"
                     plain
@@ -297,6 +305,41 @@
       </template>
     </ElDialog>
 
+    <ElDialog v-model="rootAccessVisible" :title="`资源库权限 · ${currentRoot?.name || ''}`" width="620px">
+      <p class="root-access-hint">权限作用于该租户资源库及全部子文件夹；文件的公开/私有访问设置仍单独生效。</p>
+      <ArtForm label-width="100px">
+        <ElFormItem label="开放范围">
+          <ElSelect v-model="rootAccessForm.mode" style="width: 100%">
+            <ElOption label="私密（仅归属租户）" value="PRIVATE" />
+            <ElOption label="全部租户" value="ALL" />
+            <ElOption label="指定租户" value="SELECTED" />
+          </ElSelect>
+        </ElFormItem>
+        <ElFormItem v-if="rootAccessForm.mode === 'ALL'" label="开放操作">
+          <ElCheckboxGroup v-model="rootAccessForm.permissions">
+            <ElCheckbox v-for="item in permissionOptions" :key="item.value" :value="item.value">{{ item.label }}</ElCheckbox>
+          </ElCheckboxGroup>
+        </ElFormItem>
+        <ElFormItem v-if="rootAccessForm.mode === 'SELECTED'" label="授权租户">
+          <ElSelect v-model="rootAccessForm.tenants" multiple filterable style="width: 100%" placeholder="请选择租户">
+            <ElOption v-for="root in tenantRootOptions" :key="root.tenantId" :value="root.tenantId" :label="root.name" />
+          </ElSelect>
+        </ElFormItem>
+        <div v-if="rootAccessForm.mode === 'SELECTED'" class="grant-list">
+          <div v-for="tenantId in rootAccessForm.tenants" :key="tenantId" class="grant-row">
+            <strong>{{ tenantRootOptions.find((root) => root.tenantId === tenantId)?.name || tenantId }}</strong>
+            <ElCheckboxGroup v-model="rootGrantPermissions[tenantId]">
+              <ElCheckbox v-for="item in permissionOptions" :key="item.value" :value="item.value">{{ item.label }}</ElCheckbox>
+            </ElCheckboxGroup>
+          </div>
+        </div>
+      </ArtForm>
+      <template #footer>
+        <ElButton @click="rootAccessVisible = false">取消</ElButton>
+        <ElButton type="primary" :loading="saving" @click="saveRootAccess">保存权限</ElButton>
+      </template>
+    </ElDialog>
+
     <ElDialog
       v-model="usageVisible"
       :title="`资源引用 · ${usageFile?.originalFileName || ''}`"
@@ -345,6 +388,8 @@
   import emptyFilesIcon from '@/assets/images/resource-library/empty-files.png'
   import {
     listResources,
+    listResourceRoots,
+    configureResourceRoot,
     listResourceFolders,
     renameResourceFolder,
     deleteResourceFolder,
@@ -356,16 +401,84 @@
     getResourceAccessUrl,
     setResourceVisibility,
     getResourceUsages,
-    type ResourceFile
+    type ResourceFile,
+    type ResourceRoot
   } from '@/api/resource-library'
   import { createNestedResourceFolder, type NestedResourceFolder } from '@/api/resource-folders'
 
   defineOptions({ name: 'PlatformResources' })
 
   const userStore = useUserStore()
+  const isPlatform = computed(() => userStore.isSuperAdmin && !userStore.activeTenant)
+  const ownTenantId = computed(() => String(userStore.activeTenant?.id || userStore.info.tenantId || '0'))
+  const selectedRootId = ref(isPlatform.value ? '0' : ownTenantId.value)
+  const tenantRoots = ref<ResourceRoot[]>([])
+  const rootOptions = computed<ResourceRoot[]>(() => isPlatform.value
+    ? [{ tenantId: '0', name: '平台资源', mode: 'PRIVATE' as const, permissions: 0, grants: [], myPermissions: 15 }, ...tenantRoots.value]
+    : tenantRoots.value)
+  const tenantRootOptions = computed(() => tenantRoots.value.filter((root) => root.tenantId !== selectedRootId.value))
+  const currentRoot = computed(() => rootOptions.value.find((root) => root.tenantId === selectedRootId.value))
+  const canEdit = computed(() => Boolean((currentRoot.value?.myPermissions || 0) & 4))
+  const canUpload = computed(() => Boolean((currentRoot.value?.myPermissions || 0) & 8))
+  const rootAccessVisible = ref(false)
+  const permissionOptions = [
+    { label: '查看', value: 'view', bit: 1 },
+    { label: '选用资源', value: 'select', bit: 2 },
+    { label: '编辑', value: 'edit', bit: 4 },
+    { label: '上传', value: 'upload', bit: 8 }
+  ]
+  const rootAccessForm = reactive({ mode: 'PRIVATE' as ResourceRoot['mode'], permissions: [] as string[], tenants: [] as string[] })
+  const rootGrantPermissions = reactive<Record<string, string[]>>({})
+  watch(() => rootAccessForm.tenants, (ids) => {
+    for (const id of ids) rootGrantPermissions[id] ||= []
+  }, { deep: true })
+  const toKeys = (bits: number) => permissionOptions.filter((item) => (bits & item.bit) !== 0).map((item) => item.value)
+  const toBits = (keys: string[]) => {
+    const bits = permissionOptions.reduce((sum, item) => sum | (keys.includes(item.value) ? item.bit : 0), 0)
+    return bits & (2 | 4) ? bits | 1 : bits
+  }
+  async function loadRoots() {
+    tenantRoots.value = await listResourceRoots()
+    if (!rootOptions.value.some((root) => root.tenantId === selectedRootId.value))
+      selectedRootId.value = rootOptions.value[0]?.tenantId || '0'
+  }
+  async function selectRoot(id: string) {
+    selectedRootId.value = id
+    folderFilter.value = undefined
+    selected.value = []
+    await loadFolders()
+    search()
+    loadCapacity()
+  }
+  function openRootAccess() {
+    const root = currentRoot.value
+    if (!root || !isPlatform.value || root.tenantId === '0') return
+    rootAccessForm.mode = root.mode
+    rootAccessForm.permissions = toKeys(root.permissions)
+    rootAccessForm.tenants = root.grants.map((grant) => grant.tenantId)
+    for (const grant of root.grants) rootGrantPermissions[grant.tenantId] = toKeys(grant.permissions)
+    rootAccessVisible.value = true
+  }
+  async function saveRootAccess() {
+    if (!currentRoot.value) return
+    saving.value = true
+    try {
+      await configureResourceRoot(currentRoot.value.tenantId, {
+        mode: rootAccessForm.mode,
+        permissions: toBits(rootAccessForm.permissions),
+        grants: rootAccessForm.tenants.map((tenantId) => ({ tenantId, permissions: toBits(rootGrantPermissions[tenantId] || []) }))
+      })
+      await loadRoots()
+      rootAccessVisible.value = false
+      ElMessage.success('根目录权限已保存')
+    } finally { saving.value = false }
+  }
   const capacityText = ref('')
   async function loadCapacity() {
-    if (userStore.isSuperAdmin && !userStore.activeTenant) return
+    if (selectedRootId.value !== ownTenantId.value || (userStore.isSuperAdmin && !userStore.activeTenant)) {
+      capacityText.value = ''
+      return
+    }
     try {
       const item = (await getMyEntitlements()).features.resource_storage_bytes
       capacityText.value = item?.enabled
@@ -394,12 +507,11 @@
     keyword: '',
     type: '' as '' | 'image' | 'file',
     visibility: '' as '' | 'PUBLIC' | 'PRIVATE',
-    tenantId: '',
     uploaderId: ''
   })
   const hiddenFilterCount = computed(() =>
     userStore.isSuperAdmin
-      ? Number(Boolean(filters.tenantId.trim())) + Number(Boolean(filters.uploaderId.trim()))
+      ? Number(Boolean(filters.uploaderId.trim()))
       : 0
   )
   const selected = ref<ResourceFile[]>([])
@@ -568,14 +680,17 @@
                         default: () => [
                           h(ElDropdownItem, { command: 'preview' }, () => '预览'),
                           h(ElDropdownItem, { command: 'download' }, () => '下载'),
-                          h(ElDropdownItem, { command: 'usage' }, () => '查看引用'),
+                          ...((isPlatform.value || selectedRootId.value === ownTenantId.value)
+                            ? [h(ElDropdownItem, { command: 'usage' }, () => '查看引用')] : []),
                           ...(row.visibility === 'PRIVATE'
                             ? []
                             : [h(ElDropdownItem, { command: 'copy' }, () => '复制链接')]),
-                          h(ElDropdownItem, { command: 'rename' }, () => '重命名'),
-                          h(ElDropdownItem, { command: 'move' }, () => '移动到文件夹'),
-                          h(ElDropdownItem, { command: 'visibility' }, () => '切换公开/私有'),
-                          h(ElDropdownItem, { command: 'delete', divided: true }, () => '删除')
+                          ...(canEdit.value ? [
+                            h(ElDropdownItem, { command: 'rename' }, () => '重命名'),
+                            h(ElDropdownItem, { command: 'move' }, () => '移动到文件夹'),
+                            h(ElDropdownItem, { command: 'visibility' }, () => '切换公开/私有'),
+                            h(ElDropdownItem, { command: 'delete', divided: true }, () => '删除')
+                          ] : [])
                         ]
                       })
                   }
@@ -593,7 +708,7 @@
   )
   const currentFolderName = computed(() =>
     folderFilter.value === undefined
-      ? '全部资源'
+      ? currentRoot.value?.name || '全部资源'
       : folderFilter.value === '0'
         ? '未分类'
         : folderName(folderFilter.value)
@@ -668,7 +783,9 @@
   )
 
   async function loadFolders() {
-    folders.value = await listResourceFolders()
+    const tenantId = selectedRootId.value
+    const result = await listResourceFolders(tenantId)
+    if (selectedRootId.value === tenantId) folders.value = result
   }
   function search() {
     selected.value = []
@@ -676,14 +793,14 @@
       keyword: filters.keyword || undefined,
       type: filters.type || undefined,
       visibility: filters.visibility || undefined,
-      tenantId: userStore.isSuperAdmin ? filters.tenantId || undefined : undefined,
+      tenantId: selectedRootId.value,
       uploaderId: userStore.isSuperAdmin ? filters.uploaderId || undefined : undefined,
       folderId: folderFilter.value
     })
     getData()
   }
   function resetFilters() {
-    Object.assign(filters, { keyword: '', type: '', visibility: '', tenantId: '', uploaderId: '' })
+    Object.assign(filters, { keyword: '', type: '', visibility: '', uploaderId: '' })
     search()
   }
   function selectFolder(id?: string) {
@@ -703,7 +820,8 @@
           ? parentId
           : folderFilter.value && folderFilter.value !== '0'
             ? folderFilter.value
-            : undefined
+            : undefined,
+        selectedRootId.value
       )
       await loadFolders()
       ElMessage.success('文件夹已创建')
@@ -744,6 +862,7 @@
     await uploadFiles(files)
   }
   async function onDrop(event: DragEvent) {
+    if (!canUpload.value) return
     await uploadFiles(Array.from(event.dataTransfer?.files || []))
   }
   async function retryUpload() {
@@ -752,7 +871,7 @@
     await uploadFiles(files)
   }
   async function uploadFiles(files: File[]) {
-    if (!files.length || uploading.value) return
+    if (!files.length || uploading.value || !canUpload.value) return
     uploading.value = true
     uploadProgress.value = 0
     failedFiles.value = []
@@ -767,7 +886,8 @@
             uploadVisibility.value,
             (percent) => {
               uploadProgress.value = Math.round(((uploaded + percent / 100) / files.length) * 100)
-            }
+            },
+            selectedRootId.value
           )
         } catch {
           failedFiles.value.push(file)
@@ -823,7 +943,7 @@
   async function confirmMove() {
     saving.value = true
     try {
-      await moveResources(moveIds.value, moveFolderId.value || null)
+      await moveResources(moveIds.value, moveFolderId.value || null, selectedRootId.value)
       moveVisible.value = false
       selected.value = []
       await refreshUpdate()
@@ -900,8 +1020,10 @@
       /* 取消输入或请求失败由公共层提示 */
     }
   }
-  onMounted(() => {
-    loadFolders()
+  onMounted(async () => {
+    await loadRoots()
+    await loadFolders()
+    search()
     loadCapacity()
   })
 </script>
@@ -951,6 +1073,30 @@
   .folder-list {
     display: grid;
     gap: 3px;
+    max-height: 220px;
+    overflow-y: auto;
+  }
+
+  .grant-list {
+    margin-left: 100px;
+    max-height: 260px;
+    overflow-y: auto;
+  }
+
+  .root-access-hint {
+    margin: 0 0 16px;
+    color: var(--el-text-color-secondary);
+    font-size: 12px;
+  }
+
+  .grant-row {
+    padding: 10px 0;
+    border-bottom: 1px solid var(--el-border-color-lighter);
+  }
+
+  .grant-row strong {
+    display: block;
+    margin-bottom: 6px;
   }
 
   .folder-divider {
