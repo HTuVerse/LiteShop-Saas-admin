@@ -218,13 +218,6 @@
         <template #actions>
           <ElButton :icon="Refresh" :loading="schemesLoading" @click="loadSchemes()">刷新</ElButton>
           <ElButton
-            :icon="View"
-            :disabled="!rows.some((row) => row.status === 1)"
-            @click="detailVisible = true"
-          >
-            会员端详情预览
-          </ElButton>
-          <ElButton
             v-auth="'system:level:add'"
             type="primary"
             :icon="Plus"
@@ -364,7 +357,6 @@
       v-model="assignmentVisible"
       :template="selected"
     />
-    <MemberLevelDetail v-model="detailVisible" :levels="rows" />
   </div>
 </template>
 <script setup lang="ts">
@@ -379,12 +371,10 @@
     InfoFilled,
     Plus,
     Refresh,
-    Search,
-    View
+    Search
   } from '@element-plus/icons-vue'
   import { useUserStore } from '@/store/modules/user'
   import TemplateTenantsDialog from './modules/template-tenants-dialog.vue'
-  import MemberLevelDetail from './modules/member-level-detail.vue'
   import ArtButtonTable from '@/components/core/forms/art-button-table/index.vue'
   import crownIllustration from '@/assets/images/system/level-crown.png'
   import giftIllustration from '@/assets/images/system/level-gift.png'
@@ -417,7 +407,6 @@
     platform.value ? schemes.value : [...schemes.value, ...templates.value]
   )
   const assignmentVisible = ref(false)
-  const detailVisible = ref(false)
   const selected = computed(() =>
     availableSchemes.value.find((s) => String(s.id) === selectedId.value)
   )
