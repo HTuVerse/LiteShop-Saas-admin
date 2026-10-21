@@ -27,6 +27,7 @@ const labels: Record<string, [string, string, string]> = {
   'device/template': ['打印模板', '/operations/templates', 'operations:templates'],
   'activity/coupon': ['优惠券管理', '/marketing/coupon', 'marketing:coupon'],
   'activity/pointsMall': ['积分兑换管理', '/marketing/points-mall', 'marketing:points-mall'],
+  'activity/wallet': ['储值管理', '/marketing/wallet', 'marketing:wallet'],
   'activity/lottery': ['抽奖管理', '/marketing/lottery', 'marketing:lottery'],
   'activity/record': ['核销记录', '/operations/verify-record', 'operations:verify-record'],
   'config/miniapp': ['基础配置', '/config/basic', 'config:basic'],
