@@ -4,7 +4,7 @@
       <aside class="folder-panel">
         <div class="folder-heading">
           <span>文件夹</span>
-          <ElButton class="folder-add" text aria-label="新建文件夹" @click="createFolder">
+          <ElButton class="folder-add" text aria-label="新建文件夹" @click="createFolder()">
             <ArtSvgIcon icon="ri:add-line" />
           </ElButton>
         </div>
@@ -25,13 +25,14 @@
           </button>
           <div class="folder-divider" />
           <div
-            v-for="folder in folders"
+            v-for="folder in visibleFolders"
             :key="folder.id"
             class="folder-row"
             :class="{ active: folderFilter === folder.id }"
           >
             <button
               class="folder-item"
+              :style="{ paddingLeft: `${12 + folder.depth * 18}px` }"
               :class="{ active: folderFilter === folder.id }"
               @click="selectFolder(folder.id)"
             >
@@ -48,6 +49,7 @@
               /></ElButton>
               <template #dropdown>
                 <ElDropdownMenu>
+                  <ElDropdownItem command="create-child">新建子文件夹</ElDropdownItem>
                   <ElDropdownItem command="rename">重命名</ElDropdownItem>
                   <ElDropdownItem command="delete">删除</ElDropdownItem>
                 </ElDropdownMenu>
@@ -64,6 +66,7 @@
             <span class="context-icon"><img :src="currentFolderIcon" alt="" /></span>
             <span class="context-name">{{ currentFolderName }}</span>
             <span class="context-count">{{ pagination.total }} 项</span>
+            <span v-if="capacityText" class="context-count">{{ capacityText }}</span>
           </div>
           <div class="primary-actions">
             <ElSelect
@@ -74,10 +77,10 @@
               <ElOption label="公开上传" value="PUBLIC" />
               <ElOption label="私有上传" value="PRIVATE" />
             </ElSelect>
-            <ElButton @click="storageConfigVisible = true"
+            <ElButton v-if="userStore.isSuperAdmin" @click="storageConfigVisible = true"
               ><ArtSvgIcon icon="ri:settings-3-line" />存储配置</ElButton
             >
-            <ElButton @click="createFolder"
+            <ElButton @click="createFolder()"
               ><ArtSvgIcon icon="ri:folder-add-line" />新建文件夹</ElButton
             >
             <ElButton type="primary" :loading="uploading" @click="fileInput?.click()">
@@ -124,10 +127,10 @@
                   <ElOption label="私有" value="PRIVATE" />
                 </ElSelect>
               </ElFormItem>
-              <ElFormItem v-show="filtersExpanded" class="id-field">
+              <ElFormItem v-if="userStore.isSuperAdmin" v-show="filtersExpanded" class="id-field">
                 <ElInput v-model="filters.tenantId" clearable placeholder="商户 ID" />
               </ElFormItem>
-              <ElFormItem v-show="filtersExpanded" class="id-field">
+              <ElFormItem v-if="userStore.isSuperAdmin" v-show="filtersExpanded" class="id-field">
                 <ElInput v-model="filters.uploaderId" clearable placeholder="上传者 ID" />
               </ElFormItem>
               <ElButton class="expand-button" @click="filtersExpanded = !filtersExpanded">
@@ -328,6 +331,8 @@
   import { ElDropdown, ElDropdownItem, ElDropdownMenu, ElMessage, ElMessageBox } from 'element-plus'
   import { Search } from '@element-plus/icons-vue'
   import { useTable } from '@/hooks/core/useTable'
+  import { useUserStore } from '@/store/modules/user'
+  import { getMyEntitlements } from '@/api/saas'
   import ArtButtonTable from '@/components/core/forms/art-button-table/index.vue'
   import PlatformServicesConfig from '@/views/config/website/modules/platform-services-config.vue'
   import folderBlueIcon from '@/assets/images/resource-library/folder-blue.png'
@@ -341,7 +346,6 @@
   import {
     listResources,
     listResourceFolders,
-    createResourceFolder,
     renameResourceFolder,
     deleteResourceFolder,
     uploadResources,
@@ -352,13 +356,38 @@
     getResourceAccessUrl,
     setResourceVisibility,
     getResourceUsages,
-    type ResourceFile,
-    type ResourceFolder
+    type ResourceFile
   } from '@/api/resource-library'
+  import { createNestedResourceFolder, type NestedResourceFolder } from '@/api/resource-folders'
 
   defineOptions({ name: 'PlatformResources' })
 
-  const folders = ref<ResourceFolder[]>([])
+  const userStore = useUserStore()
+  const capacityText = ref('')
+  async function loadCapacity() {
+    if (userStore.isSuperAdmin && !userStore.activeTenant) return
+    try {
+      const item = (await getMyEntitlements()).features.resource_storage_bytes
+      capacityText.value = item?.enabled
+        ? `已用 ${formatSize(item.used || 0)} / ${item.unlimited ? '不限量' : formatSize(item.limit || 0)}`
+        : '资源库容量未分配'
+    } catch {
+      capacityText.value = ''
+    }
+  }
+
+  const folders = ref<NestedResourceFolder[]>([])
+  const visibleFolders = computed(() => {
+    const result: (NestedResourceFolder & { depth: number })[] = []
+    const visit = (parentId: string | null, depth: number) => {
+      for (const folder of folders.value.filter((item) => (item.parentId || null) === parentId)) {
+        result.push({ ...folder, depth })
+        visit(folder.id, depth + 1)
+      }
+    }
+    visit(null, 0)
+    return result
+  })
   const folderFilter = ref<string>()
   const filtersExpanded = ref(false)
   const filters = reactive({
@@ -368,8 +397,10 @@
     tenantId: '',
     uploaderId: ''
   })
-  const hiddenFilterCount = computed(
-    () => Number(Boolean(filters.tenantId.trim())) + Number(Boolean(filters.uploaderId.trim()))
+  const hiddenFilterCount = computed(() =>
+    userStore.isSuperAdmin
+      ? Number(Boolean(filters.tenantId.trim())) + Number(Boolean(filters.uploaderId.trim()))
+      : 0
   )
   const selected = ref<ResourceFile[]>([])
   const activeFileId = ref<string>()
@@ -645,8 +676,8 @@
       keyword: filters.keyword || undefined,
       type: filters.type || undefined,
       visibility: filters.visibility || undefined,
-      tenantId: filters.tenantId || undefined,
-      uploaderId: filters.uploaderId || undefined,
+      tenantId: userStore.isSuperAdmin ? filters.tenantId || undefined : undefined,
+      uploaderId: userStore.isSuperAdmin ? filters.uploaderId || undefined : undefined,
       folderId: folderFilter.value
     })
     getData()
@@ -660,22 +691,32 @@
     search()
   }
 
-  async function createFolder() {
+  async function createFolder(parentId?: string) {
     try {
       const { value } = await ElMessageBox.prompt('输入文件夹名称', '新建文件夹', {
         inputPattern: /\S/,
         inputErrorMessage: '请输入名称'
       })
-      await createResourceFolder(value.trim())
+      await createNestedResourceFolder(
+        value.trim(),
+        typeof parentId === 'string'
+          ? parentId
+          : folderFilter.value && folderFilter.value !== '0'
+            ? folderFilter.value
+            : undefined
+      )
       await loadFolders()
       ElMessage.success('文件夹已创建')
     } catch {
       /* 取消输入或请求失败由公共层提示 */
     }
   }
-  async function folderCommand(command: string, folder: ResourceFolder) {
+  async function folderCommand(command: string, folder: NestedResourceFolder) {
     try {
-      if (command === 'rename') {
+      if (command === 'create-child') {
+        await createFolder(folder.id)
+        return
+      } else if (command === 'rename') {
         const { value } = await ElMessageBox.prompt('输入新名称', '重命名文件夹', {
           inputValue: folder.name,
           inputPattern: /\S/,
@@ -736,6 +777,7 @@
       if (uploaded > failedFiles.value.length)
         ElMessage.success(`已上传 ${uploaded - failedFiles.value.length} 个文件`)
       await refreshCreate()
+      await loadCapacity()
     } finally {
       uploading.value = false
     }
@@ -858,7 +900,10 @@
       /* 取消输入或请求失败由公共层提示 */
     }
   }
-  onMounted(loadFolders)
+  onMounted(() => {
+    loadFolders()
+    loadCapacity()
+  })
 </script>
 
 <style scoped lang="scss">

@@ -92,6 +92,7 @@
               <el-icon><Plus /></el-icon>
             </ElUpload>
             <div class="upload-tip">建议尺寸 200x200，支持 jpg/png 格式，不超过2MB</div>
+            <ElButton @click="pickerVisible = true">从资源库选择</ElButton>
           </div>
         </ElFormItem>
         <ElFormItem label="中奖概率" prop="probability">
@@ -136,6 +137,7 @@
         </ElFormItem>
       </ArtForm>
 
+      <ResourcePicker v-model="pickerVisible" @select="selectResource" />
       <template #footer>
         <ElButton @click="prizeDialogVisible = false">取消</ElButton>
         <ElButton
@@ -157,6 +159,8 @@
 <script setup lang="ts">
   import { useTable } from '@/hooks/core/useTable'
   import { uploadRequest } from '@/api/upload'
+  import ResourcePicker from '@/components/business/ResourcePicker.vue'
+  import type { ResourceFile } from '@/api/resource-library'
   import { h, ref, reactive, computed, watch } from 'vue'
   import type { FormInstance, FormRules, UploadFile } from 'element-plus'
   import {
@@ -174,7 +178,6 @@
     ElRadio,
     ElMessage,
     ElMessageBox,
-    ElColorPicker,
     ElUpload,
     ElSlider
   } from 'element-plus'
@@ -216,13 +219,20 @@
 
   // 上传配置
   const userStore = useUserStore()
-  const uploadUrl = import.meta.env.VITE_API_URL + '/file-upload/upload/image'
   const uploadHeaders = computed(() => ({
     satoken: userStore.accessToken || ''
   }))
 
   // 奖品图片文件列表
   const prizeFileList = ref<UploadFile[]>([])
+  const pickerVisible = ref(false)
+  const selectResource = (file: ResourceFile) => {
+    if (!file.url) return
+    prizeFormData.imgUrl = file.url
+    prizeFileList.value = [
+      { name: file.originalFileName, url: file.url, uid: -Date.now(), status: 'success' }
+    ]
+  }
 
   const searchKeyword = ref('')
 

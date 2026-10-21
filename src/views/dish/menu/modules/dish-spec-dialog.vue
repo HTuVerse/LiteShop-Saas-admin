@@ -71,6 +71,14 @@
                   row.imageUrl ? '更换图片' : '上传图片'
                 }}</ElButton></ElUpload
               >
+              <ElButton
+                size="small"
+                @click="
+                  selectingRow = row
+                  pickerVisible = true
+                "
+                >从资源库选择</ElButton
+              >
             </div>
           </template>
           <template #tableColumnsSlot3="{ row }">
@@ -114,6 +122,7 @@
       </div>
     </div>
 
+    <ResourcePicker v-model="pickerVisible" @select="selectResource" />
     <template #footer>
       <div class="dialog-footer">
         <ElButton @click="dialogVisible = false">取消</ElButton>
@@ -128,6 +137,8 @@
 <script setup lang="ts">
   import { useTable } from '@/hooks/core/useTable'
   import { uploadRequest } from '@/api/upload'
+  import ResourcePicker from '@/components/business/ResourcePicker.vue'
+  import type { ResourceFile } from '@/api/resource-library'
   import type { FormInstance, FormRules } from 'element-plus'
   import {
     ElMessage,
@@ -143,6 +154,11 @@
   import { Failed, WarningFilled } from '@element-plus/icons-vue'
   import request from '@/utils/http'
   import { h, ref, reactive, computed, watch, nextTick } from 'vue'
+  const pickerVisible = ref(false)
+  const selectingRow = ref<any>()
+  const selectResource = (file: ResourceFile) => {
+    if (file.url && selectingRow.value) selectingRow.value.imageUrl = file.url
+  }
   import ArtButtonTable from '@/components/core/forms/art-button-table/index.vue'
 
   interface Props {

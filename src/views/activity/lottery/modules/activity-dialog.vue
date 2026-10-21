@@ -50,6 +50,7 @@
             <el-icon><Plus /></el-icon>
           </ElUpload>
           <div class="upload-tip">建议尺寸 400x400，支持 jpg/png 格式，不超过2MB</div>
+          <ElButton @click="pickerVisible = true">从资源库选择</ElButton>
         </div>
       </ElFormItem>
 
@@ -74,6 +75,7 @@
       </ElFormItem>
     </ArtForm>
 
+    <ResourcePicker v-model="pickerVisible" @select="selectResource" />
     <template #footer>
       <div class="dialog-footer">
         <ElButton @click="dialogVisible = false">取消</ElButton>
@@ -103,6 +105,8 @@
   import { Plus } from '@element-plus/icons-vue'
   import { fetchUpdateActivity, fetchAddActivity } from '@/api/lottery-manage'
   import { useUserStore } from '@/store/modules/user'
+  import ResourcePicker from '@/components/business/ResourcePicker.vue'
+  import type { ResourceFile } from '@/api/resource-library'
 
   interface Props {
     visible: boolean
@@ -133,13 +137,20 @@
 
   // 上传配置
   const userStore = useUserStore()
-  const uploadUrl = import.meta.env.VITE_API_URL + '/file-upload/upload/image'
   const uploadHeaders = computed(() => ({
     satoken: userStore.accessToken || ''
   }))
 
   // 文件列表
   const fileList = ref<UploadFile[]>([])
+  const pickerVisible = ref(false)
+  const selectResource = (file: ResourceFile) => {
+    if (!file.url) return
+    formData.imgUrl = file.url
+    fileList.value = [
+      { name: file.originalFileName, url: file.url, uid: -Date.now(), status: 'success' }
+    ]
+  }
 
   // 时间范围
   const timeRange = ref<[string, string] | null>(null)
@@ -176,7 +187,7 @@
       description: isEdit ? row?.description || '' : '',
       tag: isEdit ? row?.tag || '' : '',
       imgUrl: isEdit ? row?.imgUrl || '' : '',
-      status: isEdit ? row?.status ?? 1 : 1,
+      status: isEdit ? (row?.status ?? 1) : 1,
       startTime: isEdit ? row?.startTime || '' : '',
       endTime: isEdit ? row?.endTime || '' : ''
     })
