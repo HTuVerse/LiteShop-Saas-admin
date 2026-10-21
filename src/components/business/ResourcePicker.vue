@@ -26,7 +26,7 @@
           <ElSelect
             v-model="folderId"
             clearable
-            placeholder="全部文件夹"
+            placeholder="全部可选文件夹"
             style="width: 180px"
             @change="search"
           >

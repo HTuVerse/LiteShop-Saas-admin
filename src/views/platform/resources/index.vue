@@ -360,12 +360,20 @@
       width="620px"
     >
       <p class="root-access-hint"
-        >当前目录的权限作用于未分类资源及继承它的子目录；子目录可单独覆盖。公开/私有访问设置仍单独生效。</p
+        >{{
+          folderAccessTarget
+            ? '此文件夹的权限可独立配置，子文件夹默认继承最近的父文件夹权限。'
+            : '根目录权限仅作用于未分类资源和根目录操作；文件夹需要单独配置权限。'
+        }}公开/私有访问设置仍单独生效。</p
       >
       <ArtForm label-width="100px">
         <ElFormItem label="开放范围">
           <ElSelect v-model="rootAccessForm.mode" style="width: 100%">
-            <ElOption v-if="folderAccessTarget" label="继承上级目录" value="INHERIT" />
+            <ElOption
+              v-if="folderAccessTarget"
+              label="继承父文件夹（顶层默认私密）"
+              value="INHERIT"
+            />
             <ElOption label="私密（仅归属方）" value="PRIVATE" />
             <ElOption label="全部租户" value="ALL" />
             <ElOption label="指定租户" value="SELECTED" />
