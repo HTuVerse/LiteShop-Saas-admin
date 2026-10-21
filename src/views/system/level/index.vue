@@ -218,6 +218,13 @@
         <template #actions>
           <ElButton :icon="Refresh" :loading="schemesLoading" @click="loadSchemes()">刷新</ElButton>
           <ElButton
+            :icon="View"
+            :disabled="!rows.some((row) => row.status === 1)"
+            @click="detailVisible = true"
+          >
+            会员端详情预览
+          </ElButton>
+          <ElButton
             v-auth="'system:level:add'"
             type="primary"
             :icon="Plus"
@@ -357,6 +364,7 @@
       v-model="assignmentVisible"
       :template="selected"
     />
+    <MemberLevelDetail v-model="detailVisible" :levels="rows" />
   </div>
 </template>
 <script setup lang="ts">
@@ -371,10 +379,12 @@
     InfoFilled,
     Plus,
     Refresh,
-    Search
+    Search,
+    View
   } from '@element-plus/icons-vue'
   import { useUserStore } from '@/store/modules/user'
   import TemplateTenantsDialog from './modules/template-tenants-dialog.vue'
+  import MemberLevelDetail from './modules/member-level-detail.vue'
   import ArtButtonTable from '@/components/core/forms/art-button-table/index.vue'
   import crownIllustration from '@/assets/images/system/level-crown.png'
   import giftIllustration from '@/assets/images/system/level-gift.png'
@@ -407,6 +417,7 @@
     platform.value ? schemes.value : [...schemes.value, ...templates.value]
   )
   const assignmentVisible = ref(false)
+  const detailVisible = ref(false)
   const selected = computed(() =>
     availableSchemes.value.find((s) => String(s.id) === selectedId.value)
   )
@@ -569,10 +580,10 @@
     (scheme.isActive === 1
       ? '（当前启用）'
       : scheme.isDefault === 1
-      ? '（平台默认）'
-      : !platform.value && scheme.tenantId == null
-      ? '（平台分配）'
-      : '')
+        ? '（平台默认）'
+        : !platform.value && scheme.tenantId == null
+          ? '（平台分配）'
+          : '')
   const schemesLoading = ref(false),
     saving = ref(false),
     schemeSaving = ref(false),
@@ -814,7 +825,8 @@
     min-height: 188px;
     padding: 24px 28px 20px;
     overflow: hidden;
-    background: radial-gradient(circle at 84% 12%, rgb(88 142 255 / 16%), transparent 28%),
+    background:
+      radial-gradient(circle at 84% 12%, rgb(88 142 255 / 16%), transparent 28%),
       linear-gradient(120deg, #fff 0%, #f7faff 58%, #edf4ff 100%);
     border: 1px solid #e1e9f7;
     border-radius: 14px;
@@ -948,7 +960,10 @@
     background: linear-gradient(135deg, #fff, #fbfdff);
     border: 1px solid #dbe6f7;
     border-radius: 11px;
-    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+    transition:
+      transform 0.2s ease,
+      box-shadow 0.2s ease,
+      border-color 0.2s ease;
 
     &:hover:not(:disabled) {
       border-color: #a9c5f8;
