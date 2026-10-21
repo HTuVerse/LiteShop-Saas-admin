@@ -52,7 +52,7 @@
 
       <template #empty>
         <div v-if="loading"></div>
-        <ElEmpty v-else :description="emptyText" :image-size="120" />
+        <ElEmpty v-else :description="emptyText" :image-size="96" />
       </template>
     </ElTable>
 
@@ -236,11 +236,15 @@
   const height = computed(() => {
     // 全屏模式下占满全屏
     if (isFullScreen.value) return '100%'
-    if (instance?.slots.default) return props.height || undefined
-    // 空数据且非加载状态时固定高度
-    if (isEmpty.value && !props.loading) return props.emptyHeight
-    // 使用传入的高度
+    // 固定表格高度优先；auto 表格可使用单独配置的空状态高度
+    if (props.height && props.height !== 'auto') return props.height
+    if (isEmpty.value && !props.loading && props.emptyHeight !== '100%') {
+      return props.emptyHeight
+    }
     if (props.height) return props.height
+    // 空数据且非加载状态时使用空状态高度
+    if (isEmpty.value && !props.loading) return props.emptyHeight
+    if (instance?.slots.default) return undefined
     // 默认占满容器高度
     return '100%'
   })

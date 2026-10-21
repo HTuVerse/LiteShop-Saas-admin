@@ -21,10 +21,23 @@
     opacity: 0;
   }
 
-  // 空状态垂直居中
+  // 保持 Element Plus 滚动容器的原生布局，由空状态块自身居中内容
   &.is-empty {
-    :deep(.el-scrollbar__wrap) {
-      display: flex;
+    :deep(.el-table__empty-block) {
+      min-height: 150px;
+    }
+
+    :deep(.el-table__empty-text) {
+      width: 100%;
+      line-height: normal;
+    }
+
+    :deep(.el-empty) {
+      padding: 8px 0;
+    }
+
+    :deep(.el-empty__description) {
+      margin-top: 12px;
     }
   }
 
