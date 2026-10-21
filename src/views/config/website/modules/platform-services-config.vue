@@ -1,6 +1,11 @@
 <template>
   <div class="service-groups">
-    <section v-if="!props.fileOnly" id="website-message" class="service-config" v-loading="messageLoading">
+    <section
+      v-if="!props.fileOnly"
+      id="website-message"
+      class="service-config"
+      v-loading="messageLoading"
+    >
       <header>
         <div>
           <h2>信息配置</h2>
@@ -104,7 +109,9 @@
       <ArtForm v-if="fileReady" :model="fileForm" label-position="top" :disabled="fileSaving">
         <h3>文件上传</h3>
         <ElAlert type="warning" :closable="false" class="mb-4">
-          统一公开入口可让业务图片地址与存储平台解耦。启用前请将该路径转发到文件服务；旧源站域名和 Bucket 仍需保留。首次保存云存储密钥前，请先为配置服务设置 CONFIG_CREDENTIAL_ENCRYPTION_KEY 并重启。
+          统一公开入口可让业务图片地址与存储平台解耦。启用前请将该路径转发到文件服务；旧源站域名和
+          Bucket 仍需保留。首次保存云存储密钥前，请先为配置服务设置 CONFIG_CREDENTIAL_ENCRYPTION_KEY
+          并重启。
         </ElAlert>
         <div class="field-grid">
           <ElFormItem label="默认存储方式">
@@ -118,9 +125,31 @@
           <ElFormItem label="单文件上限（MB）"
             ><ElInputNumber v-model="fileForm.maxSize" :min="1" :max="2048"
           /></ElFormItem>
+          <ElFormItem label="图片自动压缩">
+            <ElSwitch v-model="fileForm.imageCompressionEnabled" />
+            <div class="field-hint">管理端、小程序和资源库上传的图片统一生效。</div>
+          </ElFormItem>
+          <ElFormItem v-if="fileForm.imageCompressionEnabled" label="压缩后图片不超过（MB）">
+            <ElInputNumber
+              v-model="fileForm.imageCompressionTargetMb"
+              :min="0.1"
+              :max="50"
+              :step="0.1"
+              :precision="1"
+            />
+            <div class="field-hint"
+              >已满足大小的图片保持原样；压缩后仍超限则上传失败。GIF 保留动画，动态 WebP
+              超限时拒绝上传。</div
+            >
+          </ElFormItem>
           <ElFormItem class="full" label="统一公开资源入口">
-            <ElInput v-model="fileForm.publicDeliveryBaseUrl" placeholder="https://static.example.com/images/resource" />
-            <div class="field-hint">留空沿用各存储驱动的公开域名；启用后公开 URL 为此地址加资源 ID。</div>
+            <ElInput
+              v-model="fileForm.publicDeliveryBaseUrl"
+              placeholder="https://static.example.com/images/resource"
+            />
+            <div class="field-hint"
+              >留空沿用各存储驱动的公开域名；启用后公开 URL 为此地址加资源 ID。</div
+            >
           </ElFormItem>
           <template v-if="fileForm.storageMode === 'LOCAL'">
             <ElFormItem label="本地上传目录"><ElInput v-model="fileForm.uploadPath" /></ElFormItem>
@@ -132,29 +161,101 @@
             ><ElInput v-model="fileForm.allowedTypes" placeholder="jpg,jpeg,png,gif,webp"
           /></ElFormItem>
           <template v-if="fileForm.storageMode === 'MINIO'">
-            <ElFormItem label="MinIO API Endpoint"><ElInput v-model="fileForm.minioEndpoint" placeholder="https://minio-api.example.com" /></ElFormItem>
-            <ElFormItem label="浏览器可达 API Endpoint"><ElInput v-model="fileForm.minioBrowserEndpoint" placeholder="私有签名链接使用，留空与 API Endpoint 相同" /></ElFormItem>
-            <ElFormItem label="公开 Bucket"><ElInput v-model="fileForm.minioPublicBucket" /></ElFormItem>
-            <ElFormItem label="私有 Bucket"><ElInput v-model="fileForm.minioPrivateBucket" /></ElFormItem>
-            <ElFormItem class="full" label="公开资源域名"><ElInput v-model="fileForm.minioPublicBaseUrl" placeholder="https://static.example.com/" /></ElFormItem>
-            <ElFormItem label="Access Key"><ElInput v-model="fileForm.minioAccessKey" type="password" show-password autocomplete="new-password" :placeholder="secretHint(fileForm.minioAccessKeyConfigured)" /><ElCheckbox v-model="fileForm.clearMinioAccessKey">清除现有密钥</ElCheckbox></ElFormItem>
-            <ElFormItem label="Secret Key"><ElInput v-model="fileForm.minioSecretKey" type="password" show-password autocomplete="new-password" :placeholder="secretHint(fileForm.minioSecretKeyConfigured)" /><ElCheckbox v-model="fileForm.clearMinioSecretKey">清除现有密钥</ElCheckbox></ElFormItem>
+            <ElFormItem label="MinIO API Endpoint"
+              ><ElInput
+                v-model="fileForm.minioEndpoint"
+                placeholder="https://minio-api.example.com"
+            /></ElFormItem>
+            <ElFormItem label="浏览器可达 API Endpoint"
+              ><ElInput
+                v-model="fileForm.minioBrowserEndpoint"
+                placeholder="私有签名链接使用，留空与 API Endpoint 相同"
+            /></ElFormItem>
+            <ElFormItem label="公开 Bucket"
+              ><ElInput v-model="fileForm.minioPublicBucket"
+            /></ElFormItem>
+            <ElFormItem label="私有 Bucket"
+              ><ElInput v-model="fileForm.minioPrivateBucket"
+            /></ElFormItem>
+            <ElFormItem class="full" label="公开资源域名"
+              ><ElInput
+                v-model="fileForm.minioPublicBaseUrl"
+                placeholder="https://static.example.com/"
+            /></ElFormItem>
+            <ElFormItem label="Access Key"
+              ><ElInput
+                v-model="fileForm.minioAccessKey"
+                type="password"
+                show-password
+                autocomplete="new-password"
+                :placeholder="secretHint(fileForm.minioAccessKeyConfigured)"
+              /><ElCheckbox v-model="fileForm.clearMinioAccessKey"
+                >清除现有密钥</ElCheckbox
+              ></ElFormItem
+            >
+            <ElFormItem label="Secret Key"
+              ><ElInput
+                v-model="fileForm.minioSecretKey"
+                type="password"
+                show-password
+                autocomplete="new-password"
+                :placeholder="secretHint(fileForm.minioSecretKeyConfigured)"
+              /><ElCheckbox v-model="fileForm.clearMinioSecretKey"
+                >清除现有密钥</ElCheckbox
+              ></ElFormItem
+            >
           </template>
           <template v-if="fileForm.storageMode === 'OSS'">
-            <ElFormItem label="阿里云 OSS Endpoint"><ElInput v-model="fileForm.ossEndpoint" placeholder="https://oss-cn-hangzhou.aliyuncs.com" /></ElFormItem>
-            <ElFormItem label="公开 Bucket"><ElInput v-model="fileForm.ossPublicBucket" /></ElFormItem>
-            <ElFormItem label="私有 Bucket"><ElInput v-model="fileForm.ossPrivateBucket" /></ElFormItem>
-            <ElFormItem label="公开资源域名"><ElInput v-model="fileForm.ossPublicBaseUrl" placeholder="https://static.example.com/" /></ElFormItem>
-            <ElFormItem label="Access Key"><ElInput v-model="fileForm.ossAccessKey" type="password" show-password autocomplete="new-password" :placeholder="secretHint(fileForm.ossAccessKeyConfigured)" /><ElCheckbox v-model="fileForm.clearOssAccessKey">清除现有密钥</ElCheckbox></ElFormItem>
-            <ElFormItem label="Secret Key"><ElInput v-model="fileForm.ossSecretKey" type="password" show-password autocomplete="new-password" :placeholder="secretHint(fileForm.ossSecretKeyConfigured)" /><ElCheckbox v-model="fileForm.clearOssSecretKey">清除现有密钥</ElCheckbox></ElFormItem>
+            <ElFormItem label="阿里云 OSS Endpoint"
+              ><ElInput
+                v-model="fileForm.ossEndpoint"
+                placeholder="https://oss-cn-hangzhou.aliyuncs.com"
+            /></ElFormItem>
+            <ElFormItem label="公开 Bucket"
+              ><ElInput v-model="fileForm.ossPublicBucket"
+            /></ElFormItem>
+            <ElFormItem label="私有 Bucket"
+              ><ElInput v-model="fileForm.ossPrivateBucket"
+            /></ElFormItem>
+            <ElFormItem label="公开资源域名"
+              ><ElInput
+                v-model="fileForm.ossPublicBaseUrl"
+                placeholder="https://static.example.com/"
+            /></ElFormItem>
+            <ElFormItem label="Access Key"
+              ><ElInput
+                v-model="fileForm.ossAccessKey"
+                type="password"
+                show-password
+                autocomplete="new-password"
+                :placeholder="secretHint(fileForm.ossAccessKeyConfigured)"
+              /><ElCheckbox v-model="fileForm.clearOssAccessKey"
+                >清除现有密钥</ElCheckbox
+              ></ElFormItem
+            >
+            <ElFormItem label="Secret Key"
+              ><ElInput
+                v-model="fileForm.ossSecretKey"
+                type="password"
+                show-password
+                autocomplete="new-password"
+                :placeholder="secretHint(fileForm.ossSecretKeyConfigured)"
+              /><ElCheckbox v-model="fileForm.clearOssSecretKey"
+                >清除现有密钥</ElCheckbox
+              ></ElFormItem
+            >
           </template>
           <template v-if="fileForm.storageMode === 'QINIU'">
             <ElFormItem label="七牛空间"><ElInput v-model="fileForm.qiniuBucket" /></ElFormItem>
             <ElFormItem label="七牛访问域名"
               ><ElInput v-model="fileForm.qiniuDomain" placeholder="https://cdn.example.com"
             /></ElFormItem>
-            <ElFormItem label="七牛私有 Bucket"><ElInput v-model="fileForm.qiniuPrivateBucket" /></ElFormItem>
-            <ElFormItem label="七牛私有访问域名"><ElInput v-model="fileForm.qiniuPrivateDomain" /></ElFormItem>
+            <ElFormItem label="七牛私有 Bucket"
+              ><ElInput v-model="fileForm.qiniuPrivateBucket"
+            /></ElFormItem>
+            <ElFormItem label="七牛私有访问域名"
+              ><ElInput v-model="fileForm.qiniuPrivateDomain"
+            /></ElFormItem>
             <ElFormItem label="AccessKey">
               <ElInput
                 v-model="fileForm.qiniuAccessKey"
@@ -179,7 +280,9 @@
         </div>
         <div class="actions">
           <span>文件配置版本 v{{ fileForm.revision }}</span>
-          <ElButton :loading="connectionChecking" :disabled="fileDirty" @click="checkConnection">测试已保存的连接</ElButton>
+          <ElButton :loading="connectionChecking" :disabled="fileDirty" @click="checkConnection"
+            >测试已保存的连接</ElButton
+          >
           <ElButton type="primary" :loading="fileSaving" :disabled="!fileDirty" @click="saveFile"
             >保存文件配置</ElButton
           >
@@ -240,6 +343,8 @@
   }
   function acceptFile(value: PlatformFileConfig) {
     Object.assign(fileForm, value, {
+      imageCompressionEnabled: value.imageCompressionEnabled ?? false,
+      imageCompressionTargetMb: value.imageCompressionTargetMb ?? 2,
       qiniuAccessKey: '',
       qiniuSecretKey: '',
       minioAccessKey: '',
@@ -309,7 +414,9 @@
     try {
       await checkPlatformFileConnection()
       ElMessage.success('公开与私有存储连接正常')
-    } finally { connectionChecking.value = false }
+    } finally {
+      connectionChecking.value = false
+    }
   }
   onMounted(() => {
     if (!props.fileOnly) void reloadMessage()
@@ -327,44 +434,53 @@
     border-radius: 14px;
     scroll-margin-top: var(--website-sticky-top);
   }
+
   header {
     display: flex;
     align-items: center;
     justify-content: space-between;
     margin-bottom: 24px;
   }
+
   header h2 {
     margin: 0 0 8px;
     font-size: 19px;
   }
+
   header p {
     margin: 0;
     color: var(--el-text-color-secondary);
   }
+
   h3 {
     margin: 28px 0 18px;
     font-size: 16px;
   }
+
   .field-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0 22px;
   }
+
   .full {
     grid-column: 1 / -1;
   }
+
   .field-hint {
     font-size: 12px;
     color: var(--el-text-color-secondary);
   }
+
   .actions {
     display: flex;
+    gap: 16px;
     align-items: center;
     justify-content: flex-end;
-    gap: 16px;
     padding-top: 16px;
     color: var(--el-text-color-secondary);
   }
+
   @media (width <= 700px) {
     .field-grid {
       grid-template-columns: 1fr;

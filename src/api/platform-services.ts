@@ -27,6 +27,8 @@ export interface PlatformServiceConfig {
   publicDeliveryBaseUrl: string
   allowedTypes: string
   maxSize: number
+  imageCompressionEnabled: boolean
+  imageCompressionTargetMb: number
   qiniuAccessKey: string
   qiniuAccessKeyConfigured: boolean
   clearQiniuAccessKey: boolean
@@ -92,6 +94,8 @@ export type PlatformFileConfig = Pick<
   | 'publicDeliveryBaseUrl'
   | 'allowedTypes'
   | 'maxSize'
+  | 'imageCompressionEnabled'
+  | 'imageCompressionTargetMb'
   | 'qiniuAccessKey'
   | 'qiniuAccessKeyConfigured'
   | 'clearQiniuAccessKey'
