@@ -21,6 +21,15 @@ export interface ResourceFolder {
   name: string
   parentId?: string | null
   tenantId?: string
+  myPermissions?: number
+  navigationOnly?: boolean
+}
+
+export interface ResourceFolderAccess {
+  mode: ResourceRoot['mode'] | 'INHERIT'
+  permissions: number
+  grants: ResourceRoot['grants']
+  myPermissions: number
 }
 
 export interface ResourceRoot {
@@ -30,6 +39,7 @@ export interface ResourceRoot {
   permissions: number
   grants: { tenantId: string; permissions: number }[]
   myPermissions: number
+  selectableFolders: boolean
 }
 
 export interface ResourceQuery {
@@ -83,6 +93,13 @@ export const listResourceRoots = () => request.get<ResourceRoot[]>({ url: `${bas
 
 export const configureResourceRoot = (tenantId: string, data: Pick<ResourceRoot, 'mode' | 'permissions' | 'grants'>) =>
   request.put<ResourceRoot>({ url: `${base}/roots/${tenantId}/access`, data })
+
+export const getResourceFolderAccess = (id: string) =>
+  request.get<ResourceFolderAccess>({ url: `${base}/folders/${id}/access` })
+
+export const configureResourceFolder = (id: string,
+  data: Pick<ResourceFolderAccess, 'mode' | 'permissions' | 'grants'>) =>
+  request.put<ResourceFolderAccess>({ url: `${base}/folders/${id}/access`, data })
 
 export const listResourceFolders = (tenantId?: string) =>
   request.get<ResourceFolder[]>({ url: `${base}/folders`, params: { tenantId } })

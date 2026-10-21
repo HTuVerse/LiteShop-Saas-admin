@@ -27,7 +27,7 @@
         <button class="sidebar-item" :class="{ active: folderId === undefined }" @click="selectFolder()">
           <ArtSvgIcon icon="ri:folder-open-line" /><span>全部文件</span>
         </button>
-        <button class="sidebar-item" :class="{ active: folderId === '0' }" @click="selectFolder('0')">
+        <button v-if="(currentRoot?.myPermissions || 0) & 1" class="sidebar-item" :class="{ active: folderId === '0' }" @click="selectFolder('0')">
           <ArtSvgIcon icon="ri:folder-line" /><span>未分类</span>
         </button>
         <div v-for="folder in visibleFolders" :key="folder.id" class="folder-row"
@@ -36,7 +36,7 @@
             @click="selectFolder(folder.id)">
             <ArtSvgIcon icon="ri:folder-line" /><span>{{ folder.name }}</span>
           </button>
-          <ElDropdown v-if="canEdit" trigger="click" @command="(command: string) => folderCommand(command, folder)">
+          <ElDropdown v-if="(folder.myPermissions || 0) & 4" trigger="click" @command="(command: string) => folderCommand(command, folder)">
             <ElButton text size="small" aria-label="文件夹操作"><ArtSvgIcon icon="ri:more-2-fill" /></ElButton>
             <template #dropdown><ElDropdownMenu>
               <ElDropdownItem command="child">新建子文件夹</ElDropdownItem>
@@ -50,7 +50,7 @@
         <div class="content-heading"><strong>{{ currentRoot?.name || '资源库' }}</strong>
           <span>{{ pagination.total }} 个文件</span>
           <span v-if="currentRoot && currentRoot.tenantId !== ownTenantId" class="permission-note">
-            {{ permissionsLabel(currentRoot.myPermissions) }}
+            {{ permissionsLabel(currentPermissions) || '仅开放指定文件夹' }}
           </span>
         </div>
         <ArtForm class="library-search" inline @submit.prevent="search">
@@ -74,7 +74,7 @@
             </div></template>
             <template #actions="{ row }">
               <ElButton text type="primary" @click="preview(row)">预览</ElButton>
-              <ElDropdown v-if="canEdit" trigger="click" @command="(command: string) => fileCommand(command, row)">
+              <ElDropdown v-if="canEditFile(row)" trigger="click" @command="(command: string) => fileCommand(command, row)">
                 <ElButton text aria-label="文件操作"><ArtSvgIcon icon="ri:more-2-fill" /></ElButton>
                 <template #dropdown><ElDropdownMenu>
                   <ElDropdownItem command="rename">重命名</ElDropdownItem>
@@ -97,8 +97,9 @@
     <ElDialog v-model="moveVisible" title="移动文件" width="420px">
       <ArtForm label-width="90px"><ElFormItem label="目标文件夹">
         <ElSelect v-model="moveFolderId" style="width: 100%">
-          <ElOption label="未分类" value="" />
-          <ElOption v-for="folder in folders" :key="folder.id" :label="folder.name" :value="folder.id" />
+          <ElOption v-if="(currentRoot?.myPermissions || 0) & 4" label="未分类" value="" />
+          <ElOption v-for="folder in folders.filter((item) => (item.myPermissions || 0) & 4)"
+            :key="folder.id" :label="folder.name" :value="folder.id" />
         </ElSelect>
       </ElFormItem></ArtForm>
       <template #footer><ElButton @click="moveVisible = false">取消</ElButton>
@@ -126,8 +127,14 @@
   const roots = ref<ResourceRoot[]>([])
   const selectedRootId = ref('')
   const currentRoot = computed(() => roots.value.find((root) => root.tenantId === selectedRootId.value))
-  const canEdit = computed(() => Boolean((currentRoot.value?.myPermissions || 0) & 4))
-  const canUpload = computed(() => Boolean((currentRoot.value?.myPermissions || 0) & 8))
+  const currentPermissions = computed(() => folderId.value && folderId.value !== '0'
+    ? folders.value.find((folder) => folder.id === folderId.value)?.myPermissions || 0
+    : currentRoot.value?.myPermissions || 0)
+  const canEdit = computed(() => Boolean(currentPermissions.value & 4))
+  const canUpload = computed(() => Boolean(currentPermissions.value & 8))
+  const canEditFile = (file: ResourceFile) => Boolean((file.folderId
+    ? folders.value.find((folder) => folder.id === file.folderId)?.myPermissions || 0
+    : currentRoot.value?.myPermissions || 0) & 4)
   const folders = ref<NestedResourceFolder[]>([])
   const folderId = ref<string>()
   const visibleFolders = computed(() => {
@@ -199,7 +206,7 @@
   }
   function resetSearch() { keyword.value = ''; type.value = ''; search() }
   async function createFolder(parentId?: string) {
-    if (!canEdit.value) return
+    if (parentId ? !((folders.value.find((folder) => folder.id === parentId)?.myPermissions || 0) & 4) : !canEdit.value) return
     try {
       const { value } = await ElMessageBox.prompt('输入文件夹名称', '新建文件夹', {
         inputPattern: /\S/, inputErrorMessage: '请输入名称'
@@ -249,7 +256,7 @@
     if (!open && previewUrl.value.startsWith('blob:')) URL.revokeObjectURL(previewUrl.value)
   })
   async function fileCommand(command: string, file: ResourceFile) {
-    if (!canEdit.value) return
+    if (!canEditFile(file)) return
     try {
       if (command === 'rename') {
         const { value } = await ElMessageBox.prompt('输入新文件名', '重命名文件', {

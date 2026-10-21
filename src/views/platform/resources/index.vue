@@ -48,7 +48,7 @@
                 folder.name
               }}</span>
             </button>
-            <ElDropdown v-if="canEdit"
+            <ElDropdown v-if="canEdit || isPlatform"
               trigger="click"
               @command="(command: string) => folderCommand(command, folder)"
             >
@@ -57,9 +57,10 @@
               /></ElButton>
               <template #dropdown>
                 <ElDropdownMenu>
-                  <ElDropdownItem command="create-child">新建子文件夹</ElDropdownItem>
-                  <ElDropdownItem command="rename">重命名</ElDropdownItem>
-                  <ElDropdownItem command="delete">删除</ElDropdownItem>
+                  <ElDropdownItem v-if="isPlatform" command="access">配置权限</ElDropdownItem>
+                  <ElDropdownItem v-if="canEdit" command="create-child">新建子文件夹</ElDropdownItem>
+                  <ElDropdownItem v-if="canEdit" command="rename">重命名</ElDropdownItem>
+                  <ElDropdownItem v-if="canEdit" command="delete">删除</ElDropdownItem>
                 </ElDropdownMenu>
               </template>
             </ElDropdown>
@@ -303,11 +304,12 @@
       </template>
     </ElDialog>
 
-    <ElDialog v-model="rootAccessVisible" :title="`资源库权限 · ${currentRoot?.name || ''}`" width="620px">
-      <p class="root-access-hint">权限作用于当前资源库及全部子文件夹；文件的公开/私有访问设置仍单独生效。</p>
+    <ElDialog v-model="rootAccessVisible" :title="`资源库权限 · ${folderAccessTarget?.name || currentRoot?.name || ''}`" width="620px">
+      <p class="root-access-hint">当前目录的权限作用于未分类资源及继承它的子目录；子目录可单独覆盖。公开/私有访问设置仍单独生效。</p>
       <ArtForm label-width="100px">
         <ElFormItem label="开放范围">
           <ElSelect v-model="rootAccessForm.mode" style="width: 100%">
+            <ElOption v-if="folderAccessTarget" label="继承上级目录" value="INHERIT" />
             <ElOption label="私密（仅归属方）" value="PRIVATE" />
             <ElOption label="全部租户" value="ALL" />
             <ElOption label="指定租户" value="SELECTED" />
@@ -388,6 +390,8 @@
     listResources,
     listResourceRoots,
     configureResourceRoot,
+    getResourceFolderAccess,
+    configureResourceFolder,
     listResourceFolders,
     renameResourceFolder,
     deleteResourceFolder,
@@ -424,7 +428,8 @@
     { label: '编辑', value: 'edit', bit: 4 },
     { label: '上传', value: 'upload', bit: 8 }
   ]
-  const rootAccessForm = reactive({ mode: 'PRIVATE' as ResourceRoot['mode'], permissions: [] as string[], tenants: [] as string[] })
+  const folderAccessTarget = ref<NestedResourceFolder>()
+  const rootAccessForm = reactive({ mode: 'PRIVATE' as ResourceRoot['mode'] | 'INHERIT', permissions: [] as string[], tenants: [] as string[] })
   const rootGrantPermissions = reactive<Record<string, string[]>>({})
   watch(() => rootAccessForm.tenants, (ids) => {
     for (const id of ids) rootGrantPermissions[id] ||= []
@@ -450,24 +455,39 @@
   function openRootAccess() {
     const root = currentRoot.value
     if (!root || !isPlatform.value) return
+    folderAccessTarget.value = undefined
     rootAccessForm.mode = root.mode
     rootAccessForm.permissions = toKeys(root.permissions)
     rootAccessForm.tenants = root.grants.map((grant) => grant.tenantId)
     for (const grant of root.grants) rootGrantPermissions[grant.tenantId] = toKeys(grant.permissions)
     rootAccessVisible.value = true
   }
+  async function openFolderAccess(folder: NestedResourceFolder) {
+    if (!isPlatform.value) return
+    const access = await getResourceFolderAccess(folder.id)
+    folderAccessTarget.value = folder
+    rootAccessForm.mode = access.mode
+    rootAccessForm.permissions = toKeys(access.permissions)
+    rootAccessForm.tenants = access.grants.map((grant) => grant.tenantId)
+    for (const grant of access.grants) rootGrantPermissions[grant.tenantId] = toKeys(grant.permissions)
+    rootAccessVisible.value = true
+  }
   async function saveRootAccess() {
     if (!currentRoot.value) return
     saving.value = true
     try {
-      await configureResourceRoot(currentRoot.value.tenantId, {
+      const data = {
         mode: rootAccessForm.mode,
         permissions: toBits(rootAccessForm.permissions),
         grants: rootAccessForm.tenants.map((tenantId) => ({ tenantId, permissions: toBits(rootGrantPermissions[tenantId] || []) }))
-      })
+      }
+      if (folderAccessTarget.value) await configureResourceFolder(folderAccessTarget.value.id, data)
+      else await configureResourceRoot(currentRoot.value.tenantId, { ...data, mode: data.mode as ResourceRoot['mode'] })
       await loadRoots()
+      await loadFolders()
+      search()
       rootAccessVisible.value = false
-      ElMessage.success('根目录权限已保存')
+      ElMessage.success('目录权限已保存')
     } finally { saving.value = false }
   }
   const capacityText = ref('')
@@ -828,6 +848,7 @@
   }
   async function folderCommand(command: string, folder: NestedResourceFolder) {
     try {
+      if (command === 'access') { await openFolderAccess(folder); return }
       if (command === 'create-child') {
         await createFolder(folder.id)
         return

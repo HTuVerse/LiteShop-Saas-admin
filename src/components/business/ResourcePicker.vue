@@ -24,6 +24,7 @@
             :key="folder.id"
             :label="folder.label"
             :value="folder.id"
+            :disabled="folder.disabled"
           />
         </ElSelect>
       </ElFormItem>
@@ -31,6 +32,7 @@
       <ElButton type="primary" native-type="submit">搜索</ElButton>
     </ArtForm>
     <ArtTable
+      v-if="roots.length"
       row-key="id"
       :data="rows"
       :columns="columns"
@@ -50,6 +52,7 @@
         ><ElButton type="primary" text @click="choose(row)">选择</ElButton></template
       >
     </ArtTable>
+    <ElEmpty v-else description="暂无可选用的资源" />
   </ElDialog>
 </template>
 
@@ -74,10 +77,11 @@
   const folderId = ref('')
   const folders = ref<NestedResourceFolder[]>([])
   const folderOptions = computed(() => {
-    const result: { id: string; label: string }[] = []
+    const result: { id: string; label: string; disabled: boolean }[] = []
     const visit = (parentId: string | null, depth: number) => {
       for (const folder of folders.value.filter((item) => (item.parentId || null) === parentId)) {
-        result.push({ id: folder.id, label: `${'　'.repeat(depth)}${folder.name}` })
+        result.push({ id: folder.id, label: `${'　'.repeat(depth)}${folder.name}`,
+          disabled: !((folder.myPermissions || 0) & 2) })
         visit(folder.id, depth + 1)
       }
     }
@@ -122,7 +126,7 @@
     async (open) => {
       if (open) {
         const available = await listResourceRoots()
-        roots.value = available.filter((root) => (root.myPermissions & 2) !== 0)
+        roots.value = available.filter((root) => (root.myPermissions & 2) !== 0 || root.selectableFolders)
         if (!roots.value.some((root) => root.tenantId === tenantId.value))
           tenantId.value = roots.value[0]?.tenantId || ''
         await changeRoot()
@@ -135,6 +139,7 @@
     search()
   }
   function search() {
+    if (!tenantId.value) return
     replaceSearchParams({
       keyword: keyword.value || undefined,
       folderId: folderId.value || undefined,
