@@ -1,7 +1,7 @@
 <template>
   <ElDialog
     :model-value="modelValue"
-    title="选择公开资源"
+    :title="imageOnly ? '选择资源库图片' : '选择资源库文件'"
     width="min(900px, 95vw)"
     @update:model-value="emit('update:modelValue', $event)"
   >
@@ -40,13 +40,11 @@
       @pagination:current-change="handleCurrentChange"
     >
       <template #preview="{ row }">
-        <ElImage
-          v-if="row.contentType?.startsWith('image/') && row.url"
-          :src="row.url"
-          fit="cover"
-          class="picker-thumb"
-        />
-        <span v-else>{{ row.originalFileName }}</span>
+        <ElImage v-if="isImage(row)" :src="imageUrl(row)" :preview-src-list="[imageUrl(row)]"
+          fit="cover" class="picker-thumb" preview-teleported>
+          <template #error><span class="picker-no-preview">暂无预览</span></template>
+        </ElImage>
+        <span v-else class="picker-no-preview">文件</span>
       </template>
       <template #choose="{ row }"
         ><ElButton type="primary" text @click="choose(row)">选择</ElButton></template
@@ -108,12 +106,12 @@
       columnsFactory: () => [
         {
           prop: 'originalFileName',
-          label: '预览',
-          minWidth: 210,
+          label: '图片',
+          width: 92,
           useSlot: true,
           slotName: 'preview'
         },
-        { prop: 'originalFileName', label: '名称', minWidth: 220 },
+        { prop: 'originalFileName', label: '文件名', minWidth: 280, showOverflowTooltip: true },
         { prop: 'createdAt', label: '上传时间', width: 180 },
         { prop: 'operation', label: '操作', width: 90, useSlot: true, slotName: 'choose' }
       ]
@@ -124,12 +122,7 @@
     async (open) => {
       if (open) {
         const available = await listResourceRoots()
-        roots.value = [
-          ...(userStore.isSuperAdmin && !userStore.activeTenant
-            ? [{ tenantId: '0', name: '平台资源', mode: 'PRIVATE' as const, permissions: 0, grants: [], myPermissions: 15 }]
-            : []),
-          ...available
-        ].filter((root) => (root.myPermissions & 2) !== 0)
+        roots.value = available.filter((root) => (root.myPermissions & 2) !== 0)
         if (!roots.value.some((root) => root.tenantId === tenantId.value))
           tenantId.value = roots.value[0]?.tenantId || ''
         await changeRoot()
@@ -156,12 +149,28 @@
     emit('select', file)
     emit('update:modelValue', false)
   }
+  function isImage(file: ResourceFile) {
+    return file.contentType?.startsWith('image/') || /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(file.originalFileName)
+  }
+  function imageUrl(file: ResourceFile) {
+    return file.url || `${(import.meta.env.VITE_API_URL || '/api').replace(/\/$/, '')}/images/resource/${file.id}`
+  }
 </script>
 
 <style scoped>
   .picker-thumb {
-    width: 54px;
-    height: 54px;
+    width: 58px;
+    height: 58px;
+    border-radius: 6px;
+  }
+  .picker-no-preview {
+    display: grid;
+    place-items: center;
+    width: 58px;
+    height: 58px;
+    font-size: 11px;
+    color: var(--el-text-color-placeholder);
+    background: var(--el-fill-color-light);
     border-radius: 6px;
   }
 </style>

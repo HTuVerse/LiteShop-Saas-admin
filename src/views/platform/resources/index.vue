@@ -88,7 +88,7 @@
             <ElButton v-if="userStore.isSuperAdmin" @click="storageConfigVisible = true"
               ><ArtSvgIcon icon="ri:settings-3-line" />存储配置</ElButton
             >
-            <ElButton v-if="isPlatform && selectedRootId !== '0'" @click="openRootAccess"
+            <ElButton v-if="isPlatform" @click="openRootAccess"
               ><ArtSvgIcon icon="ri:shield-keyhole-line" />根目录权限</ElButton
             >
             <ElButton v-if="canEdit" @click="createFolder()"
@@ -188,9 +188,7 @@
                   :pagination="pagination"
                   :pagination-options="{ size: 'small' }"
                   :show-table-header="false"
-                  height="auto"
-                  max-height="clamp(280px, calc(100vh - 360px), 590px)"
-                  empty-height="220px"
+                  height="100%"
                   size="small"
                   @selection-change="(items: ResourceFile[]) => (selected = items)"
                   @row-click="selectFile"
@@ -306,11 +304,11 @@
     </ElDialog>
 
     <ElDialog v-model="rootAccessVisible" :title="`资源库权限 · ${currentRoot?.name || ''}`" width="620px">
-      <p class="root-access-hint">权限作用于该租户资源库及全部子文件夹；文件的公开/私有访问设置仍单独生效。</p>
+      <p class="root-access-hint">权限作用于当前资源库及全部子文件夹；文件的公开/私有访问设置仍单独生效。</p>
       <ArtForm label-width="100px">
         <ElFormItem label="开放范围">
           <ElSelect v-model="rootAccessForm.mode" style="width: 100%">
-            <ElOption label="私密（仅归属租户）" value="PRIVATE" />
+            <ElOption label="私密（仅归属方）" value="PRIVATE" />
             <ElOption label="全部租户" value="ALL" />
             <ElOption label="指定租户" value="SELECTED" />
           </ElSelect>
@@ -413,10 +411,9 @@
   const ownTenantId = computed(() => String(userStore.activeTenant?.id || userStore.info.tenantId || '0'))
   const selectedRootId = ref(isPlatform.value ? '0' : ownTenantId.value)
   const tenantRoots = ref<ResourceRoot[]>([])
-  const rootOptions = computed<ResourceRoot[]>(() => isPlatform.value
-    ? [{ tenantId: '0', name: '平台资源', mode: 'PRIVATE' as const, permissions: 0, grants: [], myPermissions: 15 }, ...tenantRoots.value]
-    : tenantRoots.value)
-  const tenantRootOptions = computed(() => tenantRoots.value.filter((root) => root.tenantId !== selectedRootId.value))
+  const rootOptions = computed<ResourceRoot[]>(() => tenantRoots.value)
+  const tenantRootOptions = computed(() => tenantRoots.value.filter((root) =>
+    root.tenantId !== '0' && root.tenantId !== selectedRootId.value))
   const currentRoot = computed(() => rootOptions.value.find((root) => root.tenantId === selectedRootId.value))
   const canEdit = computed(() => Boolean((currentRoot.value?.myPermissions || 0) & 4))
   const canUpload = computed(() => Boolean((currentRoot.value?.myPermissions || 0) & 8))
@@ -452,7 +449,7 @@
   }
   function openRootAccess() {
     const root = currentRoot.value
-    if (!root || !isPlatform.value || root.tenantId === '0') return
+    if (!root || !isPlatform.value) return
     rootAccessForm.mode = root.mode
     rootAccessForm.permissions = toKeys(root.permissions)
     rootAccessForm.tenants = root.grants.map((grant) => grant.tenantId)
@@ -1030,6 +1027,7 @@
 
 <style scoped lang="scss">
   .resource-page {
+    height: var(--art-full-height);
     min-height: 0;
   }
 
@@ -1040,6 +1038,7 @@
   .resource-layout {
     display: grid;
     grid-template-columns: 196px minmax(0, 1fr);
+    height: 100%;
     min-height: 0;
     overflow: hidden;
     background: var(--el-bg-color);
@@ -1170,7 +1169,10 @@
   }
 
   .workspace-panel {
+    display: flex;
+    flex-direction: column;
     min-width: 0;
+    min-height: 0;
   }
 
   .workspace-toolbar {
@@ -1298,16 +1300,24 @@
 
   .content-layout {
     display: grid;
+    flex: 1;
     grid-template-columns: minmax(0, 1fr) 250px;
     min-height: 0;
   }
 
   .file-area {
+    display: flex;
+    flex-direction: column;
     min-width: 0;
+    min-height: 0;
   }
 
   .files-panel {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
     min-width: 0;
+    min-height: 0;
     padding: 8px 12px 12px;
   }
 
@@ -1321,11 +1331,12 @@
   }
 
   .table-frame {
+    flex: 1;
     min-height: 0;
   }
 
   .table-frame :deep(.art-table) {
-    height: auto !important;
+    height: 100% !important;
   }
 
   .batch-actions {
@@ -1406,7 +1417,6 @@
     align-self: stretch;
     min-width: 0;
     min-height: 0;
-    max-height: calc(100vh - 155px);
     padding: 12px;
     overflow: hidden;
     border-left: 1px solid var(--el-border-color-lighter);
@@ -1540,6 +1550,11 @@
   }
 
   @media (width <= 760px) {
+    .resource-page,
+    .resource-layout {
+      height: auto;
+    }
+
     .resource-layout {
       grid-template-columns: 1fr;
     }
