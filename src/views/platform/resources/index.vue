@@ -2,11 +2,11 @@
   <div class="resource-page">
     <div class="resource-layout">
       <aside class="folder-panel">
-        <div class="folder-heading"><span>租户资源库</span></div>
+        <div class="folder-heading"><span>{{ isPlatform ? '租户资源库' : '可访问的资源库' }}</span></div>
         <nav class="folder-list" aria-label="租户资源库">
           <button v-for="root in rootOptions" :key="root.tenantId" class="folder-item"
             :class="{ active: selectedRootId === root.tenantId }" @click="selectRoot(root.tenantId)">
-            <img class="folder-asset" :src="folderBlueIcon" alt="" /><span class="folder-name">{{ root.name }}</span>
+            <img class="folder-asset" :src="folderBlueIcon" alt="" /><span class="folder-name">{{ !isPlatform && root.tenantId === ownTenantId ? '我的资源' : root.name }}</span>
           </button>
         </nav>
         <div class="folder-divider" />
@@ -25,6 +25,7 @@
             <img class="folder-asset" :src="folderBlueIcon" alt="" /><span>全部资源</span>
           </button>
           <button
+            v-if="isPlatform || (currentRoot?.myPermissions || 0) & 1"
             class="folder-item"
             :class="{ active: folderFilter === '0' }"
             @click="selectFolder('0')"
@@ -48,7 +49,7 @@
                 folder.name
               }}</span>
             </button>
-            <ElDropdown v-if="canEdit || isPlatform"
+            <ElDropdown v-if="isPlatform || (folder.myPermissions || 0) & 4"
               trigger="click"
               @command="(command: string) => folderCommand(command, folder)"
             >
@@ -58,9 +59,9 @@
               <template #dropdown>
                 <ElDropdownMenu>
                   <ElDropdownItem v-if="isPlatform" command="access">配置权限</ElDropdownItem>
-                  <ElDropdownItem v-if="canEdit" command="create-child">新建子文件夹</ElDropdownItem>
-                  <ElDropdownItem v-if="canEdit" command="rename">重命名</ElDropdownItem>
-                  <ElDropdownItem v-if="canEdit" command="delete">删除</ElDropdownItem>
+                  <ElDropdownItem v-if="isPlatform || (folder.myPermissions || 0) & 4" command="create-child">新建子文件夹</ElDropdownItem>
+                  <ElDropdownItem v-if="isPlatform || (folder.myPermissions || 0) & 4" command="rename">重命名</ElDropdownItem>
+                  <ElDropdownItem v-if="isPlatform || (folder.myPermissions || 0) & 4" command="delete">删除</ElDropdownItem>
                 </ElDropdownMenu>
               </template>
             </ElDropdown>
@@ -76,6 +77,7 @@
             <span class="context-name">{{ currentFolderName }}</span>
             <span class="context-count">{{ pagination.total }} 项</span>
             <span v-if="capacityText" class="context-count">{{ capacityText }}</span>
+            <span v-if="!isPlatform && currentRoot" class="context-count">{{ permissionLabel(currentPermissions) || '仅开放指定文件夹' }}</span>
           </div>
           <div class="primary-actions">
             <ElSelect
@@ -86,7 +88,7 @@
               <ElOption label="公开上传" value="PUBLIC" />
               <ElOption label="私有上传" value="PRIVATE" />
             </ElSelect>
-            <ElButton v-if="userStore.isSuperAdmin" @click="storageConfigVisible = true"
+            <ElButton v-if="isPlatform" @click="storageConfigVisible = true"
               ><ArtSvgIcon icon="ri:settings-3-line" />存储配置</ElButton
             >
             <ElButton v-if="isPlatform" @click="openRootAccess"
@@ -159,13 +161,13 @@
               <div class="batch-toolbar">
                 <div class="batch-actions">
                   <span class="selected-count">已选择 {{ selected.length }} 项</span>
-                  <ElButton v-if="canEdit"
-                    :disabled="!selected.length"
+                  <ElButton v-if="isPlatform || selected.some(canEditFile)"
+                    :disabled="!selected.length || !selected.every(canEditFile)"
                     @click="openMove(selected.map((item) => item.id))"
                     >批量移动</ElButton
                   >
-                  <ElButton v-if="canEdit"
-                    :disabled="!selected.length"
+                  <ElButton v-if="isPlatform || selected.some(canEditFile)"
+                    :disabled="!selected.length || !selected.every(canEditFile)"
                     type="danger"
                     plain
                     @click="remove(selected.map((item) => item.id))"
@@ -242,6 +244,9 @@
                   }}</dd>
                   <dt>上传者 ID</dt><dd>{{ activeFile.uploaderId || '未知' }}</dd> <dt>访问权限</dt
                   ><dd>{{ activeFile.visibility === 'PRIVATE' ? '私有' : '公开' }}</dd>
+                  <template v-if="!isPlatform">
+                    <dt>可用操作</dt><dd>{{ permissionLabel(filePermissions(activeFile)) || '无' }}</dd>
+                  </template>
                 </dl>
               </div>
             </template>
@@ -288,9 +293,9 @@
       <ArtForm label-width="90px">
         <ElFormItem label="目标文件夹">
           <ElSelect v-model="moveFolderId" placeholder="未分类" style="width: 100%">
-            <ElOption label="未分类" value="" />
+            <ElOption v-if="isPlatform || (currentRoot?.myPermissions || 0) & 4" label="未分类" value="" />
             <ElOption
-              v-for="folder in folders"
+              v-for="folder in folders.filter((item) => isPlatform || (item.myPermissions || 0) & 4)"
               :key="folder.id"
               :label="folder.name"
               :value="folder.id"
@@ -419,8 +424,18 @@
   const tenantRootOptions = computed(() => tenantRoots.value.filter((root) =>
     root.tenantId !== '0' && root.tenantId !== selectedRootId.value))
   const currentRoot = computed(() => rootOptions.value.find((root) => root.tenantId === selectedRootId.value))
-  const canEdit = computed(() => Boolean((currentRoot.value?.myPermissions || 0) & 4))
-  const canUpload = computed(() => Boolean((currentRoot.value?.myPermissions || 0) & 8))
+  const currentPermissions = computed(() => folderFilter.value && folderFilter.value !== '0'
+    ? folders.value.find((folder) => folder.id === folderFilter.value)?.myPermissions || 0
+    : currentRoot.value?.myPermissions || 0)
+  const canEdit = computed(() => Boolean(currentPermissions.value & 4))
+  const canUpload = computed(() => Boolean(currentPermissions.value & 8))
+  const filePermissions = (file: ResourceFile) => file.folderId
+    ? folders.value.find((folder) => folder.id === file.folderId)?.myPermissions || 0
+    : currentRoot.value?.myPermissions || 0
+  const canEditFile = (file: ResourceFile) => Boolean(filePermissions(file) & 4)
+  const permissionLabel = (bits: number) => [
+    bits & 1 && '查看', bits & 2 && '选用', bits & 4 && '编辑', bits & 8 && '上传'
+  ].filter(Boolean).join(' · ')
   const rootAccessVisible = ref(false)
   const permissionOptions = [
     { label: '查看', value: 'view', bit: 1 },
@@ -702,7 +717,7 @@
                           ...(row.visibility === 'PRIVATE'
                             ? []
                             : [h(ElDropdownItem, { command: 'copy' }, () => '复制链接')]),
-                          ...(canEdit.value ? [
+                          ...(canEditFile(row) ? [
                             h(ElDropdownItem, { command: 'rename' }, () => '重命名'),
                             h(ElDropdownItem, { command: 'move' }, () => '移动到文件夹'),
                             h(ElDropdownItem, { command: 'visibility' }, () => '切换公开/私有'),
@@ -826,6 +841,7 @@
   }
 
   async function createFolder(parentId?: string) {
+    if (parentId ? !((folders.value.find((folder) => folder.id === parentId)?.myPermissions || 0) & 4) : !canEdit.value) return
     try {
       const { value } = await ElMessageBox.prompt('输入文件夹名称', '新建文件夹', {
         inputPattern: /\S/,
@@ -954,11 +970,16 @@
     ElMessage.success('公开链接已复制')
   }
   function openMove(ids: string[]) {
+    const targets = ids.map((id) => rows.value.find((row) => row.id === id))
+    if (!ids.length || targets.some((file) => !file || !canEditFile(file))) return
     moveIds.value = ids
-    moveFolderId.value = ''
+    moveFolderId.value = (currentRoot.value?.myPermissions || 0) & 4
+      ? '' : rows.value.find((row) => row.id === ids[0])?.folderId || ''
     moveVisible.value = true
   }
   async function confirmMove() {
+    if (!moveFolderId.value && !((currentRoot.value?.myPermissions || 0) & 4)) return
+    if (moveFolderId.value && !((folders.value.find((folder) => folder.id === moveFolderId.value)?.myPermissions || 0) & 4)) return
     saving.value = true
     try {
       await moveResources(moveIds.value, moveFolderId.value || null, selectedRootId.value)
@@ -1002,6 +1023,7 @@
       await copyUrl(file)
       return
     }
+    if (!canEditFile(file)) return
     if (command === 'move') {
       openMove([file.id])
       return

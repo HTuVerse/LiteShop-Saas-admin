@@ -62,7 +62,7 @@ export class MenuProcessor {
     const list = await fetchGetMenuList()
     const session = useUserStore()
     const platformMode = session.isSuperAdmin && !session.activeTenant
-    return adaptMenus(list, session.info as unknown as BackendUser, platformMode)
+    return adaptMenus(list, { ...session.info, roleCode: session.info.roles } as BackendUser, platformMode)
   }
 
   /**
