@@ -105,7 +105,7 @@
       paginationKey: { current: 'currentPage', size: 'pageSize' },
       columnsFactory: () => [
         {
-          prop: 'originalFileName',
+          prop: 'preview',
           label: '图片',
           width: 92,
           useSlot: true,
