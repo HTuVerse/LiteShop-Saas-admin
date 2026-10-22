@@ -218,6 +218,13 @@
         <template #actions>
           <ElButton :icon="Refresh" :loading="schemesLoading" @click="loadSchemes()">刷新</ElButton>
           <ElButton
+            v-if="selected"
+            v-auth="'system:level'"
+            :disabled="loading || schemesLoading"
+            @click="rewardRuleVisible = true"
+            >经验规则配置</ElButton
+          >
+          <ElButton
             v-auth="'system:level:add'"
             type="primary"
             :icon="Plus"
@@ -357,6 +364,13 @@
       v-model="assignmentVisible"
       :template="selected"
     />
+    <RewardRuleDialog
+      v-if="selected"
+      v-model="rewardRuleVisible"
+      :scheme-id="selected.id"
+      :levels="rows"
+      :read-only="readOnlyTemplate || !hasAuth('system:level:scheme-edit')"
+    />
   </div>
 </template>
 <script setup lang="ts">
@@ -375,6 +389,7 @@
   } from '@element-plus/icons-vue'
   import { useUserStore } from '@/store/modules/user'
   import TemplateTenantsDialog from './modules/template-tenants-dialog.vue'
+  import RewardRuleDialog from './modules/reward-rule-dialog.vue'
   import ArtButtonTable from '@/components/core/forms/art-button-table/index.vue'
   import crownIllustration from '@/assets/images/system/level-crown.png'
   import giftIllustration from '@/assets/images/system/level-gift.png'
@@ -407,6 +422,7 @@
     platform.value ? schemes.value : [...schemes.value, ...templates.value]
   )
   const assignmentVisible = ref(false)
+  const rewardRuleVisible = ref(false)
   const selected = computed(() =>
     availableSchemes.value.find((s) => String(s.id) === selectedId.value)
   )

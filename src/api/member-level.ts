@@ -23,10 +23,24 @@ export interface MemberLevel {
   sort: number
   status: number
 }
+export interface LevelRewardMultiplier {
+  levelCode: number
+  expMultiplier: number
+  pointsMultiplier: number
+}
+export interface MemberRewardRule {
+  expPerYuan: number
+  pointsPerYuan: number
+  levels: LevelRewardMultiplier[]
+}
 export const listLevelSchemes = () =>
   request.get<{ schemes: LevelScheme[]; templates: LevelScheme[] }>({ url: '/user-level/schemes' })
 export const listSchemeLevels = (id: Id) =>
   request.get<MemberLevel[]>({ url: `/user-level/schemes/${id}/levels` })
+export const getMemberRewardRule = (id: Id) =>
+  request.get<MemberRewardRule>({ url: `/user-level/schemes/${id}/reward-rule` })
+export const saveMemberRewardRule = (id: Id, data: MemberRewardRule) =>
+  request.put({ url: `/user-level/schemes/${id}/reward-rule`, data })
 export const createLevelScheme = (data: { name: string; description?: string; copyFromId?: Id }) =>
   request.post<LevelScheme>({ url: '/user-level/schemes', data })
 export const renameLevelScheme = (id: Id, data: { name: string; description?: string }) =>
