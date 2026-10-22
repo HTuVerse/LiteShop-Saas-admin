@@ -2,7 +2,8 @@
   <div class="payment-account-page art-full-height">
     <ElAlert type="info" :closable="false" show-icon class="inheritance-alert">
       <template #title>支付账户由租户总部统一维护</template>
-      当前租户下所有门店自动沿用这里启用的支付参数；门店管理员和门店员工无法查看或修改。支付宝沙箱环境会进入测试收银台，收到支付宝支付成功通知后才完成订单。当前微信支付 API v3 暂不支持小程序沙箱下单。
+      当前租户下所有门店自动沿用这里启用的支付参数；门店管理员和门店员工无法查看或修改。支付宝沙箱环境会进入测试收银台，收到支付宝支付成功通知后才完成订单。当前微信支付
+      API v3 暂不支持小程序沙箱下单。
     </ElAlert>
 
     <div v-loading="loading" class="channel-grid">
@@ -62,7 +63,9 @@
               :placeholder="`https://example.com/${channel.code === 'WECHAT' ? 'wechatPay' : 'alipayPay'}/notify`"
             />
           </ElFormItem>
-          <ElFormItem :label="channel.code === 'ALIPAY' ? '支付宝沙箱环境' : '微信沙箱环境（暂不支持）'">
+          <ElFormItem
+            :label="channel.code === 'ALIPAY' ? '支付宝沙箱环境' : '微信沙箱环境（暂不支持）'"
+          >
             <ElSwitch
               v-model="channel.form.sandboxEnabled"
               :aria-label="`${channel.name}沙箱环境`"
@@ -109,6 +112,9 @@
           </template>
 
           <template v-else>
+            <ElAlert type="warning" :closable="false" class="alipay-key-alert">
+              当前系统使用支付宝公钥模式。请在支付宝开放平台启用公钥模式，上传应用公钥；下方填写与之配对的应用私钥，以及支付宝提供的平台公钥。应用公钥不能填入“支付宝公钥”。
+            </ElAlert>
             <SecretField
               v-model="channel.form.privateKey"
               v-model:clear="channel.form.clearPrivateKey"
@@ -127,7 +133,7 @@
               multiline
               :disable-clear="channel.form.enabled"
               :configured="channel.form.alipayPublicKeyConfigured"
-              placeholder="请粘贴支付宝公钥"
+              placeholder="请粘贴支付宝平台公钥，不是应用公钥"
             />
           </template>
 
@@ -380,21 +386,29 @@
   .payment-account-page {
     padding: 20px;
   }
+
   .inheritance-alert {
     margin-bottom: 18px;
   }
+
+  .alipay-key-alert {
+    margin-bottom: 18px;
+  }
+
   .channel-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 18px;
     min-height: 240px;
   }
+
   .channel-card {
     padding: 24px;
     background: var(--el-bg-color);
     border: 1px solid var(--el-border-color-lighter);
     border-radius: 14px;
   }
+
   .channel-header,
   .channel-title,
   .enable-row,
@@ -402,75 +416,91 @@
     display: flex;
     align-items: center;
   }
+
   .channel-header,
   .enable-row {
     justify-content: space-between;
   }
+
   .channel-header {
     gap: 16px;
     margin-bottom: 24px;
   }
+
   .channel-title {
     gap: 12px;
   }
+
   .channel-title h2,
   .channel-title p,
   .enable-row p {
     margin: 0;
   }
+
   .channel-title h2 {
     font-size: 18px;
   }
+
   .channel-title p,
   .enable-row p {
     margin-top: 5px;
-    color: var(--el-text-color-secondary);
     font-size: 13px;
     line-height: 1.5;
+    color: var(--el-text-color-secondary);
   }
+
   .channel-icon {
     display: grid;
+    place-items: center;
     width: 42px;
     height: 42px;
-    color: #fff;
     font-size: 24px;
+    color: #fff;
     border-radius: 12px;
-    place-items: center;
   }
+
   .channel-icon.wechat {
     background: #07c160;
   }
+
   .channel-icon.alipay {
     background: #1677ff;
   }
+
   .enable-row {
     padding: 14px 16px;
     margin-bottom: 20px;
     background: var(--el-fill-color-light);
     border-radius: 10px;
   }
+
   .field-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0 16px;
   }
+
   .save-actions {
-    justify-content: flex-end;
     gap: 10px;
+    justify-content: flex-end;
     padding-top: 8px;
   }
+
   @media (width <= 1100px) {
     .channel-grid {
       grid-template-columns: 1fr;
     }
   }
+
   @media (width <= 640px) {
     .payment-account-page {
       padding: 12px;
     }
+
     .channel-card {
       padding: 18px;
     }
+
     .field-grid {
       grid-template-columns: 1fr;
     }
