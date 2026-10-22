@@ -54,6 +54,11 @@
         @submit="handleDialogSubmit"
         @rechargeSuccess="refreshUpdate"
       />
+      <UserAccountRecordsDialog
+        v-model:visible="accountRecordsVisible"
+        :kind="accountRecordsKind"
+        :user-data="accountRecordsUser"
+      />
     </ElCard>
   </div>
 </template>
@@ -66,6 +71,8 @@
   import UserSearch from './modules/user-search.vue'
   import UserDialog from './modules/user-dialog.vue'
   import UserRecharge from '@views/system/user/modules/user-recharge.vue'
+  import UserAccountRecordsDialog from './modules/user-account-records-dialog.vue'
+  import type { UserAccountRecordKind } from '@/api/user-account-records'
   import { ElTag, ElMessageBox, ElImage, ElTooltip } from 'element-plus'
   import { DialogType } from '@/types'
   import request from '@/utils/http'
@@ -81,6 +88,29 @@
   const currentUserData = ref<Partial<UserListItem>>({})
 
   const rechargeDialogVisible = ref(false)
+  const accountRecordsVisible = ref(false)
+  const accountRecordsKind = ref<UserAccountRecordKind>('experience')
+  const accountRecordsUser = ref<UserListItem>()
+  const openAccountRecords = (row: UserListItem, kind: UserAccountRecordKind) => {
+    accountRecordsUser.value = row
+    accountRecordsKind.value = kind
+    accountRecordsVisible.value = true
+  }
+  const accountTagEvents = (row: UserListItem, kind: UserAccountRecordKind) => ({
+    role: 'button',
+    tabindex: 0,
+    style: { cursor: 'pointer' },
+    onClick: (event: MouseEvent) => {
+      event.stopPropagation()
+      openAccountRecords(row, kind)
+    },
+    onKeydown: (event: KeyboardEvent) => {
+      if (event.key !== 'Enter' && event.key !== ' ') return
+      event.preventDefault()
+      event.stopPropagation()
+      openAccountRecords(row, kind)
+    }
+  })
   // 选中行
   const selectedRows = ref<UserListItem[]>([])
 
@@ -229,10 +259,10 @@
           prop: 'level',
           label: '等级/经验',
           width: 130,
-          formatter: (row: any) => {
+          formatter: (row: UserListItem) => {
             return h(
               ElTag,
-              { type: 'success' },
+              { type: 'success', ...accountTagEvents(row, 'experience') },
               {
                 default: () => h('p', {}, row.levelName + '/' + row.exp)
               }
@@ -243,7 +273,7 @@
           prop: 'surplusMoney',
           label: '余额',
           width: 100,
-          formatter: (row: any) => {
+          formatter: (row: UserListItem) => {
             return h(
               ElTooltip,
               {
@@ -254,7 +284,7 @@
                 default: () =>
                   h(
                     ElTag,
-                    { type: 'warning' },
+                    { type: 'warning', ...accountTagEvents(row, 'balance') },
                     {
                       default: () => h('p', {}, row.surplusMoney)
                     }
@@ -266,10 +296,10 @@
         {
           prop: 'points',
           label: '积分',
-          formatter: (row: any) => {
+          formatter: (row: UserListItem) => {
             return h(
               ElTag,
-              { type: 'info' },
+              { type: 'info', ...accountTagEvents(row, 'points') },
               {
                 default: () => h('p', {}, row.points)
               }
