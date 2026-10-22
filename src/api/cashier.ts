@@ -386,7 +386,7 @@ export function fetchCashierDirectOrder(data: {
  * 收银台-扫码支付（被扫：收银员扫顾客付款码完成收款）
  * 支持微信（paymentType=1）与支付宝（paymentType=2）。
  * 后端近实时处理：用户支付中会轮询，超时自动撤单；成功返回已支付订单。
- * 仅用于直接收银（无桌位会话）场景。
+ * 仅用于直接收银（无桌位会话）场景；桌位扫码走 settleSession。
  * @param data 下单 + 付款码 authCode
  * @returns { order } 已支付订单
  */
@@ -423,14 +423,15 @@ export function fetchCashierScanPay(data: {
 }
 
 /**
- * 收银台-桌位结算（对会话当前订单做线下支付并结束会话、释放桌位）
+ * 收银台-桌位结算（对会话当前订单完成前台收款并释放桌位）
  * 支持结算时传折扣、备注，会更新到订单。
  * @param data 桌位结算参数
  * @returns 订单信息
  */
 export function fetchCashierSettleSession(data: {
   sessionNo: string
-  paymentType: number // 3-现金，4-银行卡，6-余额
+  paymentType: number // 1-微信，2-支付宝，3-现金，4-银行卡，6-余额
+  authCode?: string // 微信/支付宝付款码（收银员扫码枪读取）
   actualAmount?: number // 选填，不传则用订单应付金额；传了用于找零与记录
   userId?: Id // 余额支付时必填
   discountRate?: number | null // 选填，整单折扣率 0.8=8折 1=无折扣
