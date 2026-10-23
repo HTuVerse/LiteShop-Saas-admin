@@ -14,6 +14,7 @@ const labels: Record<string, [string, string, string]> = {
   'system/menu': ['菜单管理', '/platform/permission', 'platform:permission'],
   'system/user': ['用户管理', '/system/user', 'system:user'],
   'system/role': ['角色管理', '/system/role', 'system:role'],
+  'system/audit': ['操作审计日志', '/system/audit', 'system:audit'],
   'system/user-store': ['门店授权', '/system/user-store', 'system:user-store'],
   'system/user-center': ['个人中心', '/system/user-center', 'common:profile'],
   'system/level': ['会员等级', '/system/level', 'system:level'],
