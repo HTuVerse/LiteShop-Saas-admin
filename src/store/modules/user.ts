@@ -298,6 +298,7 @@ export const useUserStore = defineStore(
       pick: [
         'accessToken',
         'isLogin',
+        'isLock',
         'info',
         'activeTenant',
         'activeStore',

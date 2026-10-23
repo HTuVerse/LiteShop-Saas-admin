@@ -451,7 +451,7 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, h, onMounted, reactive, ref, watch } from 'vue'
+  import { computed, h, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
   import { ElDropdown, ElDropdownItem, ElDropdownMenu, ElMessage, ElMessageBox } from 'element-plus'
   import { Search } from '@element-plus/icons-vue'
   import { useTable } from '@/hooks/core/useTable'
@@ -668,6 +668,11 @@
   const previewVisible = ref(false)
   const previewFile = ref<ResourceFile>()
   const previewUrl = ref('')
+  let previewRequestVersion = 0
+  const clearPreviewUrl = () => {
+    if (previewUrl.value.startsWith('blob:')) URL.revokeObjectURL(previewUrl.value)
+    previewUrl.value = ''
+  }
   const detailImageUrl = ref('')
   const moveVisible = ref(false)
   const storageConfigVisible = ref(false)
@@ -1063,16 +1068,39 @@
     }
   }
   async function preview(file: ResourceFile) {
+    const requestVersion = ++previewRequestVersion
+    clearPreviewUrl()
     previewFile.value = file
-    previewUrl.value = ''
     previewVisible.value = true
     if (file.visibility === 'PRIVATE') {
-      const signed = await getResourceAccessUrl(file.id)
-      previewUrl.value = signed || URL.createObjectURL(await downloadResource(file.id))
+      try {
+        const signed = await getResourceAccessUrl(file.id)
+        if (requestVersion !== previewRequestVersion || !previewVisible.value) return
+        if (signed) {
+          previewUrl.value = signed
+          return
+        }
+        const blobUrl = URL.createObjectURL(await downloadResource(file.id))
+        if (requestVersion !== previewRequestVersion || !previewVisible.value) {
+          URL.revokeObjectURL(blobUrl)
+          return
+        }
+        previewUrl.value = blobUrl
+      } catch {
+        if (requestVersion === previewRequestVersion) ElMessage.error('资源预览失败')
+      }
     } else previewUrl.value = file.url || ''
   }
   watch(previewVisible, (visible) => {
-    if (!visible && previewUrl.value.startsWith('blob:')) URL.revokeObjectURL(previewUrl.value)
+    if (!visible) {
+      previewRequestVersion++
+      clearPreviewUrl()
+      previewFile.value = undefined
+    }
+  })
+  onBeforeUnmount(() => {
+    previewRequestVersion++
+    clearPreviewUrl()
   })
   async function download(file: ResourceFile) {
     if (file.size > 20 * 1024 * 1024 || file.contentType?.startsWith('video/')) {

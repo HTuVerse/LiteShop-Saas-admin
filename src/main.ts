@@ -24,11 +24,14 @@ setupGlobDirectives(app)
 setupErrorHandle(app)
 
 app.use(language)
-async function bootstrap() {
+function bootstrap() {
   const site = useWebsiteStore()
-  await site.refresh()
   initRouter(app)
+  // 锁屏密码只保存在内存中；刷新后要求重新登录，防止绕过锁屏。
+  const session = useUserStore()
+  if (session.isLock) session.logOut()
   app.mount('#app')
+  void site.refresh()
   window.addEventListener('focus', () => void site.refresh())
   window.addEventListener('storage', event => {
     if (event.key === 'liteshop-website-published') void site.refresh(true)

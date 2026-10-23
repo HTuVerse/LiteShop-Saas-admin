@@ -34,7 +34,7 @@ export function connectTableSessionSocket(
       return
     }
     if (!active) return
-    const url = `${base.replace(/\/$/, '')}/ws/table-session?sessionNo=${encodeURIComponent(sessionNo)}&token=${encodeURIComponent(currentToken)}`
+    const url = `${base.replace(/\/$/, '')}/ws/table-session?sessionNo=${encodeURIComponent(sessionNo)}`
     let current: WebSocket
     try {
       current = new WebSocket(url)
@@ -45,19 +45,25 @@ export function connectTableSessionSocket(
     socket = current
     current.onopen = () => {
       if (!active || socket !== current) return current.close()
-      attempts = 0
-      onEvent('CONNECTED')
-      heartbeat = setInterval(() => {
-        if (current.readyState === WebSocket.OPEN) {
-          current.send(JSON.stringify({ type: 'HEARTBEAT' }))
-        }
-      }, 60000)
+      current.send(JSON.stringify({ type: 'AUTH', token: currentToken }))
     }
     current.onmessage = (event) => {
       if (!active || socket !== current) return
       try {
         const message = JSON.parse(String(event.data)) as { type?: string; sessionNo?: string }
-        if (message.sessionNo === sessionNo && message.type) onEvent(message.type)
+        if (message.sessionNo !== sessionNo || !message.type) return
+        if (message.type === 'AUTH_OK') {
+          attempts = 0
+          onEvent('CONNECTED')
+          if (heartbeat) clearInterval(heartbeat)
+          heartbeat = setInterval(() => {
+            if (current.readyState === WebSocket.OPEN) {
+              current.send(JSON.stringify({ type: 'HEARTBEAT' }))
+            }
+          }, 60000)
+          return
+        }
+        onEvent(message.type)
       } catch {
         // 忽略不属于桌位消息协议的数据。
       }

@@ -388,8 +388,8 @@ function useTableImpl<
       const response = await apiFn(requestParams)
 
       // 检查请求是否被取消
-      if (currentController.signal.aborted) {
-        throw new Error('请求已取消')
+      if (currentController.signal.aborted || abortController !== currentController) {
+        return { records: [], total: 0, current: 1, size: 10 }
       }
 
       // 使用响应适配器转换为标准格式
@@ -434,9 +434,7 @@ function useTableImpl<
 
       return standardResponse
     } catch (err) {
-      if (err instanceof Error && err.message === '请求已取消') {
-        // 请求被取消，回到 idle 状态
-        loadingState.value = 'idle'
+      if (currentController.signal.aborted || abortController !== currentController) {
         return { records: [], total: 0, current: 1, size: 10 }
       }
 
@@ -444,6 +442,7 @@ function useTableImpl<
       loadingState.value = 'error'
       data.value = []
       const tableError = handleError(err, '获取表格数据失败')
+      error.value = tableError
       throw tableError
     } finally {
       // 只有当前控制器是活跃的才清空
