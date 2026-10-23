@@ -324,7 +324,8 @@ export function fetchBatchIncreaseChances(
   activityId: number,
   chances: number,
   allUsers: boolean,
-  userIds?: (number | string)[]
+  userIds: (number | string)[] | undefined,
+  requestKey: string
 ) {
   return request.post<boolean>({
     url: '/user-activity-chance/batchIncreaseChances',
@@ -333,6 +334,7 @@ export function fetchBatchIncreaseChances(
       activityId,
       chances,
       allUsers,
+      requestKey,
       userIds: userIds?.join(',')
     }
   })

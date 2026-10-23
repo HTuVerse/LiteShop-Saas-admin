@@ -264,6 +264,8 @@
   const batchDialogVisible = ref(false)
   const batchFormRef = ref<FormInstance>()
   const batchLoading = ref(false)
+  const batchRequestKey = ref('')
+  const batchRequestSignature = ref('')
   const batchFormData = reactive({
     allUsers: true,
     userIdsStr: '',
@@ -297,6 +299,8 @@
 
   // 显示批量发放弹窗
   const showBatchDialog = () => {
+    batchRequestKey.value = ''
+    batchRequestSignature.value = ''
     batchFormData.allUsers = true
     batchFormData.userIdsStr = ''
     batchFormData.chances = 10
@@ -307,17 +311,15 @@
   const handleAddChance = async () => {
     try {
       if (!addFormRef.value) return
+      const activityId = props.activityData?.id
+      if (!activityId) return
 
       const valid = await addFormRef.value.validate()
       if (!valid) return
 
       addLoading.value = true
 
-      await fetchIncreaseUserChances(
-        addFormData.userId!,
-        props.activityData?.id!,
-        addFormData.chances
-      )
+      await fetchIncreaseUserChances(addFormData.userId!, activityId, addFormData.chances)
 
       ElMessage.success('发放成功')
       addChanceDialogVisible.value = false
@@ -334,6 +336,8 @@
   const handleBatchChance = async () => {
     try {
       if (!batchFormRef.value) return
+      const activityId = props.activityData?.id
+      if (!activityId) return
 
       const valid = await batchFormRef.value.validate()
       if (!valid) return
@@ -358,12 +362,28 @@
 
       batchLoading.value = true
 
-      await fetchBatchIncreaseChances(
-        props.activityData?.id!,
+      // 网络超时重试沿用同一请求键；修改发放参数后才生成新键。
+      const signature = JSON.stringify([
+        activityId,
         batchFormData.chances,
         batchFormData.allUsers,
         userIds
+      ])
+      if (batchRequestSignature.value !== signature) {
+        batchRequestSignature.value = signature
+        batchRequestKey.value = crypto.randomUUID()
+      }
+
+      await fetchBatchIncreaseChances(
+        activityId,
+        batchFormData.chances,
+        batchFormData.allUsers,
+        userIds,
+        batchRequestKey.value
       )
+
+      batchRequestKey.value = ''
+      batchRequestSignature.value = ''
 
       ElMessage.success(
         batchFormData.allUsers
@@ -392,6 +412,9 @@
   const handleChangeChance = async () => {
     try {
       if (!changeFormRef.value) return
+      const activityId = props.activityData?.id
+      const userId = currentUser.value?.userId
+      if (!activityId || !userId) return
 
       const valid = await changeFormRef.value.validate()
       if (!valid) return
@@ -399,18 +422,10 @@
       changeLoading.value = true
 
       if (changeType.value === 'increase') {
-        await fetchIncreaseUserChances(
-          currentUser.value?.userId!,
-          props.activityData?.id!,
-          changeFormData.amount
-        )
+        await fetchIncreaseUserChances(userId, activityId, changeFormData.amount)
         ElMessage.success('增加成功')
       } else {
-        await fetchDecreaseUserChances(
-          currentUser.value?.userId!,
-          props.activityData?.id!,
-          changeFormData.amount
-        )
+        await fetchDecreaseUserChances(userId, activityId, changeFormData.amount)
         ElMessage.success('减少成功')
       }
 
