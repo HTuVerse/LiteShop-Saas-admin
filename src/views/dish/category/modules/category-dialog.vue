@@ -8,7 +8,20 @@
     align-center
   >
     <ArtForm ref="formRef" :model="formData" :rules="rules" label-width="100px" status-icon>
-      <ElFormItem label="所属门店" prop="storeId"
+      <ElFormItem v-if="headquartersContext" label="分类来源" prop="sourceType">
+        <ElSelect
+          v-model="formData.sourceType"
+          :disabled="type === 'edit'"
+          @change="handleSourceChange"
+        >
+          <ElOption label="总部统一分类" :value="0" />
+          <ElOption label="门店自建分类" :value="1" />
+        </ElSelect>
+      </ElFormItem>
+      <ElFormItem
+        v-if="headquartersContext && formData.sourceType === 1"
+        label="所属门店"
+        prop="storeId"
         ><ElSelect
           v-model="formData.storeId"
           @change="formData.parentId = 0"
@@ -103,17 +116,19 @@
       </ElFormItem>
 
       <ElFormItem label="分类图片" prop="categoryPic">
-        <ElInput v-model="formData.categoryPic" placeholder="请输入分类图片URL" clearable>
+        <ElInput v-model="formData.categoryPic" placeholder="请输入分类图片URL" clearable
+          @input="formData.categoryImageResourceId = undefined">
           <template #append>
             <ElUpload
               :http-request="uploadRequest"
               :show-file-list="false"
               accept="image/*"
-              :on-success="(response: any) => (formData.categoryPic = response.data.url)"
+              :on-success="(response: any) => { formData.categoryPic = response.data.url; formData.categoryImageResourceId = String(response.data.id) }"
               ><ElButton>上传图片</ElButton></ElUpload
             >
           </template>
         </ElInput>
+        <ElButton @click="pickerVisible = true">从资源库选择</ElButton>
         <div v-if="formData.categoryPic" style="margin-top: 10px">
           <ElImage
             :src="formData.categoryPic"
@@ -125,6 +140,7 @@
       </ElFormItem>
     </ArtForm>
 
+    <ResourcePicker v-model="pickerVisible" @select="selectResource" />
     <template #footer>
       <ElSpace>
         <ElButton @click="handleClose">取消</ElButton>
@@ -138,6 +154,8 @@
 
 <script setup lang="ts">
   import { uploadRequest } from '@/api/upload'
+  import ResourcePicker from '@/components/business/ResourcePicker.vue'
+  import type { ResourceFile } from '@/api/resource-library'
   import {
     ElDialog,
     ElFormItem,
@@ -154,6 +172,12 @@
     type FormRules
   } from 'element-plus'
   import { ref, computed, watch } from 'vue'
+  const pickerVisible = ref(false)
+  const selectResource = (file: ResourceFile) => {
+    if (!file.url) return
+    formData.value.categoryPic = file.url
+    formData.value.categoryImageResourceId = file.id
+  }
   import { fetchAddCategory, fetchUpdateCategory, fetchGetStoreList } from '@/api/dish-manage'
   // import ArtIconSelector from '@/components/core/base/art-icon-selector/index.vue'
 
@@ -164,6 +188,8 @@
     categoryList?: Api.Category.CategoryListItem[]
     categoryTotal?: number
     loadingMore?: boolean
+    headquartersContext?: boolean
+    defaultStoreId?: string | number
   }
 
   interface Emits {
@@ -180,7 +206,8 @@
     categoryData: () => ({}),
     categoryList: () => [],
     categoryTotal: 0,
-    loadingMore: false
+    loadingMore: false,
+    headquartersContext: false
   })
 
   const emit = defineEmits<Emits>()
@@ -199,7 +226,13 @@
   // 父分类列表（只显示一级分类）
   const parentCategoryList = computed(() => {
     return props.categoryList.filter(
-      (item) => item.level === 1 && String(item.storeId) === String(formData.value.storeId)
+      (item) =>
+        item.level === 1 &&
+        (formData.value.sourceType === 0
+          ? item.sourceType === 0 || !item.storeId
+          : item.sourceType === 0 ||
+            !item.storeId ||
+            String(item.ownerStoreId || item.storeId) === String(formData.value.storeId))
     )
   })
 
@@ -207,7 +240,9 @@
   onMounted(async () => {
     try {
       stores.value = (await fetchGetStoreList()).records
-    } catch {}
+    } catch {
+      stores.value = []
+    }
   })
   // 表单引用
   const formRef = ref<FormInstance>()
@@ -215,10 +250,12 @@
 
   // 表单数据
   const formData = ref<Api.Category.CategoryFormData>({
+    sourceType: 0,
     categoryName: '',
     categoryDesc: '',
     categoryIcon: '',
     categoryPic: '',
+    categoryImageResourceId: undefined,
     parentId: 0,
     level: 1,
     sortOrder: 0,
@@ -226,8 +263,11 @@
   })
 
   // 表单验证规则
-  const rules: FormRules = {
-    storeId: [{ required: true, message: '请选择门店', trigger: 'change' }],
+  const rules = computed<FormRules>(() => ({
+    sourceType: [{ required: true, message: '请选择分类来源', trigger: 'change' }],
+    storeId: [
+      { required: formData.value.sourceType === 1, message: '请选择门店', trigger: 'change' }
+    ],
     categoryName: [
       { required: true, message: '请输入分类名称', trigger: 'blur' },
       { min: 2, max: 50, message: '长度在 2 到 50 个字符', trigger: 'blur' }
@@ -247,7 +287,7 @@
         }
       }
     ]
-  }
+  }))
 
   // 监听分类数据变化
   watch(
@@ -278,16 +318,32 @@
   // 重置表单
   function resetForm() {
     formData.value = {
+      sourceType: props.headquartersContext ? 0 : 1,
+      storeId:
+        props.headquartersContext || props.defaultStoreId == null
+          ? undefined
+          : Number(props.defaultStoreId),
+      ownerStoreId:
+        props.headquartersContext || props.defaultStoreId == null
+          ? undefined
+          : Number(props.defaultStoreId),
       categoryName: '',
       categoryDesc: '',
       categoryIcon: '',
       categoryPic: '',
+      categoryImageResourceId: undefined,
       parentId: 0,
       level: 1,
       sortOrder: 0,
       isShow: 1
     }
     formRef.value?.clearValidate()
+  }
+
+  const handleSourceChange = () => {
+    formData.value.storeId = undefined
+    formData.value.ownerStoreId = undefined
+    formData.value.parentId = 0
   }
 
   // 处理关闭
@@ -306,6 +362,8 @@
 
       // 准备提交数据
       const submitData = { ...formData.value }
+      submitData.ownerStoreId = submitData.sourceType === 1 ? submitData.storeId : undefined
+      if (submitData.sourceType === 0) submitData.storeId = undefined
 
       // 如果是一级分类，parentId设置为0
       if (submitData.level === 1) {

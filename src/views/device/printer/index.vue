@@ -758,7 +758,7 @@
         sn: formData.sn,
         remark: formData.remark,
         cardNum: formData.cardNum,
-        storeId: formData.storeId,
+        storeId: formData.storeId ? Number(formData.storeId) : undefined,
         printerBrand: formData.printerBrand,
         printerType: formData.printerType,
         paperWidth: formData.paperWidth,

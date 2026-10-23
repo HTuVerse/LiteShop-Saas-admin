@@ -5,7 +5,7 @@
       <!-- 左侧：根据券型展示金额、折扣或免单 -->
       <div class="coupon-left">
         <template v-if="couponTypeNumber === 1 || couponTypeNumber === 3">
-          <span class="value-num">{{ formatDiscount(data.couponValue) }}</span>
+          <span class="value-num">{{ formatDiscount(data?.couponValue ?? 0) }}</span>
           <span class="value-unit">折</span>
         </template>
         <template v-else-if="couponTypeNumber === 2">

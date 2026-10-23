@@ -743,7 +743,7 @@ declare namespace Api {
     interface PrinterFormParams {
       id?: number
       sn: string
-      printerKey: string
+      printerKey?: string
       remark?: string
       cardNum?: string
       storeId?: number
