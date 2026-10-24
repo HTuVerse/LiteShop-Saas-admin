@@ -63,6 +63,14 @@ export interface AuditPage {
   size: number
 }
 
+export interface AuditIntegrityResult {
+  tenantScopeId: Id
+  valid: boolean
+  lastSequence: number
+  lastHash?: string
+  reason?: string
+}
+
 const apiParams = ({ currentPage, ...params }: AuditQuery) => ({ ...params, page: currentPage })
 
 export function fetchAuditPage(params: AuditQuery) {
@@ -71,6 +79,14 @@ export function fetchAuditPage(params: AuditQuery) {
 
 export function fetchAuditDetail(id: Id) {
   return request.get<AuditDetail>({ url: `/system-audit/${id}` })
+}
+
+export function verifyAuditIntegrity(tenantId: Id) {
+  return request.get<AuditIntegrityResult>({
+    url: '/system-audit/integrity',
+    params: { tenantId },
+    timeout: 120000
+  })
 }
 
 export async function exportAuditLogs(params: AuditQuery) {

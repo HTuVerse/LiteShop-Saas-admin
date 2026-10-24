@@ -7,10 +7,16 @@
       @search="search"
       @reset="reset"
     />
+    <p class="mb-3 text-sm text-gray-500">
+      未选择时间时查询近 7 天；单次查询或导出最多跨 31 天，导出上限为 10,000 条。
+    </p>
 
     <ElCard class="art-table-card" shadow="never">
       <ArtTableHeader v-model:columns="columnChecks" :loading="loading" @refresh="refreshData">
         <template #left>
+          <ElButton v-if="userStore.isSuperAdmin" @click="integrityVisible = true">
+            完整性校验
+          </ElButton>
           <ElButton
             v-if="hasAuth('system:audit:export')"
             :loading="exporting"
@@ -33,6 +39,7 @@
     <ElDialog v-model="detailVisible" title="操作日志详情" width="760px" destroy-on-close>
       <div v-loading="detailLoading">
         <ElDescriptions v-if="detail" :column="2" border>
+          <ElDescriptionsItem label="日志 ID">{{ detail.id }}</ElDescriptionsItem>
           <ElDescriptionsItem label="操作账号">{{ detail.actorAccount }}</ElDescriptionsItem>
           <ElDescriptionsItem label="操作时间">{{
             formatTime(detail.occurredAt)
@@ -63,6 +70,11 @@
             detail.requestPath
           }}</ElDescriptionsItem>
           <ElDescriptionsItem label="请求 ID" :span="2">{{ detail.requestId }}</ElDescriptionsItem>
+          <ElDescriptionsItem label="校验链序号">{{ detail.chainSequence }}</ElDescriptionsItem>
+          <ElDescriptionsItem label="签名密钥版本">{{ detail.keyVersion }}</ElDescriptionsItem>
+          <ElDescriptionsItem label="日志摘要" :span="2">
+            <span class="break-all">{{ detail.entryHash }}</span>
+          </ElDescriptionsItem>
         </ElDescriptions>
 
         <div v-if="diffEntries.length" class="mt-5">
@@ -87,6 +99,11 @@
         </div>
       </div>
     </ElDialog>
+    <AuditIntegrityDialog
+      v-if="userStore.isSuperAdmin"
+      v-model="integrityVisible"
+      :default-scope="userStore.activeTenant?.id ? String(userStore.activeTenant.id) : '0'"
+    />
   </div>
 </template>
 
@@ -99,6 +116,7 @@
   import { exportAuditLogs, fetchAuditDetail, fetchAuditPage } from '@/api/system-audit'
   import type { AuditDetail, AuditQuery, AuditRow, AuditSearchModel } from '@/api/system-audit'
   import AuditSearch from './modules/audit-search.vue'
+  import AuditIntegrityDialog from './modules/audit-integrity-dialog.vue'
 
   defineOptions({ name: 'SystemAudit' })
   const userStore = useUserStore()
@@ -117,9 +135,13 @@
   const detailLoading = ref(false)
   const detail = ref<AuditDetail | null>(null)
   const exporting = ref(false)
+  const integrityVisible = ref(false)
 
   const filters = (): AuditQuery => ({
-    tenantId: searchForm.tenantId || undefined,
+    tenantId:
+      userStore.isSuperAdmin && !userStore.activeTenant
+        ? searchForm.tenantId || undefined
+        : undefined,
     account: searchForm.account.trim() || undefined,
     ip: searchForm.ip.trim() || undefined,
     module: searchForm.module || undefined,
@@ -132,6 +154,21 @@
       ? new Date(Number(searchForm.dateRange[1])).toISOString()
       : undefined
   })
+  const validFilters = (): AuditQuery | null => {
+    const query = filters()
+    if (query.tenantId && !/^[1-9]\d*$/.test(String(query.tenantId))) {
+      ElMessage.warning('租户 ID 请输入正整数')
+      return null
+    }
+    if (query.startTime && query.endTime) {
+      const span = Date.parse(query.endTime) - Date.parse(query.startTime)
+      if (span < 0 || span > 31 * 24 * 60 * 60 * 1000) {
+        ElMessage.warning('操作时间范围不能超过 31 天')
+        return null
+      }
+    }
+    return query
+  }
   const formatTime = (value?: string) =>
     value
       ? new Date(value).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false })
@@ -227,15 +264,20 @@
     }
   })
 
-  const search = () => getData(filters())
+  const search = () => {
+    const query = validFilters()
+    if (query) void getData(query)
+  }
   const reset = async () => {
     Object.assign(searchForm, emptySearch())
     await resetSearchParams()
   }
   const exportCurrent = async () => {
+    const query = validFilters()
+    if (!query) return
     exporting.value = true
     try {
-      const blob = await exportAuditLogs(filters())
+      const blob = await exportAuditLogs(query)
       const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url
