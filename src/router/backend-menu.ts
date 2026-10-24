@@ -83,7 +83,10 @@ export function resolveMenuScope(node: BackendMenu): MenuScope {
   if (raw === 1 || raw === '1' || raw === 'PLATFORM') return MenuScope.PLATFORM
   if (raw === 2 || raw === '2' || raw === 'TENANT') return MenuScope.TENANT
   const component = componentPath(node.component).replace(/\/index$/, '')
-  if (['/index', '/dashboard/console', '/system/user-center'].includes(component))
+  if (
+    ['/index', '/dashboard/console', '/system/user-center'].includes(component) ||
+    component.startsWith('/monitor/')
+  )
     return MenuScope.ALL
   if (node.permissionCode?.startsWith('platform:') || component.startsWith('/platform/'))
     return MenuScope.PLATFORM
