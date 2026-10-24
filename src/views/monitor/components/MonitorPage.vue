@@ -9,6 +9,8 @@
     </div>
 
     <ArtSearchBar v-model="searchForm" :items="searchItems" @search="search" @reset="reset" />
+    <p class="monitor-filter-note">账号、昵称和 IP 仅筛选在线会话；租户 ID 同时作用于统计看板。</p>
+    <ElAlert v-if="overviewError" :title="overviewError" type="error" show-icon :closable="false" />
 
     <div class="monitor-stats" v-loading="overviewLoading">
       <div v-for="card in cards" :key="card.label" class="monitor-stat art-card">
@@ -90,6 +92,8 @@
   const searchForm = reactive(emptySearch())
   const overview = ref<MonitorOverview>()
   const overviewLoading = ref(false)
+  const overviewError = ref('')
+  let overviewRequestId = 0
 
   const searchItems = computed(() => [
     ...(userStore.isSuperAdmin
@@ -143,7 +147,9 @@
     data,
     loading,
     pagination,
+    searchParams,
     getData,
+    replaceSearchParams,
     resetSearchParams,
     refreshData,
     handleSizeChange,
@@ -180,17 +186,26 @@
   })
 
   const loadOverview = async (tenantId?: MonitorQuery['tenantId']) => {
+    const requestId = ++overviewRequestId
     overviewLoading.value = true
+    overviewError.value = ''
     try {
-      overview.value = await fetchMonitorOverview(props.client, tenantId)
+      const result = await fetchMonitorOverview(props.client, tenantId)
+      if (requestId === overviewRequestId) overview.value = result
+    } catch (error) {
+      if (requestId === overviewRequestId) {
+        overview.value = undefined
+        overviewError.value = (error as Error)?.message || '统计数据加载失败，请刷新重试'
+      }
     } finally {
-      overviewLoading.value = false
+      if (requestId === overviewRequestId) overviewLoading.value = false
     }
   }
   const search = () => {
     const query = filters()
     if (!query) return
-    void getData(query)
+    replaceSearchParams(query)
+    void getData()
     void loadOverview(query.tenantId)
   }
   const reset = () => {
@@ -200,8 +215,7 @@
   }
   const refreshAll = () => {
     void refreshData()
-    const query = filters()
-    if (query) void loadOverview(query.tenantId)
+    void loadOverview(searchParams.tenantId)
   }
 
   onMounted(() => {
@@ -239,7 +253,8 @@
   }
 
   .monitor-heading p,
-  .chart-heading small {
+  .chart-heading small,
+  .monitor-filter-note {
     margin: 0;
     color: var(--el-text-color-secondary);
   }
