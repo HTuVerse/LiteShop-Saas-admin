@@ -5,12 +5,31 @@ import NProgress from 'nprogress'
 import { useCommon } from '@/hooks/core/useCommon'
 import { loadingService } from '@/utils/ui'
 import { getPendingLoading, resetPendingLoading } from './beforeEach'
+import { useUserStore } from '@/store/modules/user'
+
+let monitorHeartbeatStarted = false
+
+function pulseBusinessMonitor(visit: boolean) {
+  if (!useUserStore().accessToken) return
+  void import('@/api/system-monitor')
+    .then(({ sendMonitorPulse }) => sendMonitorPulse('B', visit))
+    .catch(() => {})
+}
 
 /** 路由全局后置守卫 */
 export function setupAfterEachGuard(router: Router) {
   const { scrollToTop } = useCommon()
 
-  router.afterEach(() => {
+  if (!monitorHeartbeatStarted) {
+    monitorHeartbeatStarted = true
+    window.setInterval(() => {
+      if (document.visibilityState === 'visible') pulseBusinessMonitor(false)
+    }, 60_000)
+  }
+
+  router.afterEach((to, from, failure) => {
+    if (!failure && to.fullPath !== from.fullPath && !to.path.startsWith('/auth/'))
+      pulseBusinessMonitor(true)
     scrollToTop()
 
     // 关闭进度条
