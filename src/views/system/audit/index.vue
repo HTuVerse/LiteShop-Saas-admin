@@ -2,7 +2,7 @@
   <div class="art-full-height">
     <AuditSearch
       :model-value="searchForm"
-      :show-tenant="userStore.isSuperAdmin"
+      :show-tenant="userStore.isSuperAdmin && !userStore.activeTenant"
       @update:model-value="(value) => Object.assign(searchForm, value)"
       @search="search"
       @reset="reset"

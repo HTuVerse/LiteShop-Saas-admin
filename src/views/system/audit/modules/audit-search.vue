@@ -31,44 +31,8 @@
       : []),
     { label: '操作账号', key: 'account', type: 'input', props: { placeholder: '账号名称' } },
     { label: 'IP 地址', key: 'ip', type: 'input', props: { placeholder: '完整 IP 地址' } },
-    {
-      label: '操作模块',
-      key: 'module',
-      type: 'select',
-      props: {
-        placeholder: '全部模块',
-        clearable: true,
-        options: [
-          { label: '登录与会话', value: 'system:auth' },
-          { label: '用户管理', value: 'system:user' },
-          { label: '角色管理', value: 'system:role' },
-          { label: '权限管理', value: 'platform:permission' },
-          { label: '租户管理', value: 'platform:tenant' },
-          { label: '审计日志', value: 'system:audit' },
-          { label: '菜品管理', value: 'restaurant:dish' },
-          { label: '系统配置', value: 'config:basic' }
-        ]
-      }
-    },
-    {
-      label: '操作类型',
-      key: 'type',
-      type: 'select',
-      props: {
-        placeholder: '全部类型',
-        clearable: true,
-        options: [
-          { label: '登录', value: 'LOGIN' },
-          { label: '退出', value: 'LOGOUT' },
-          { label: '新增', value: 'CREATE' },
-          { label: '修改', value: 'UPDATE' },
-          { label: '删除', value: 'DELETE' },
-          { label: '权限调整', value: 'PERMISSION_ASSIGN' },
-          { label: '角色调整', value: 'ROLE_ASSIGN' },
-          { label: '导出', value: 'EXPORT' }
-        ]
-      }
-    },
+    { label: '操作模块', key: 'module', type: 'input', props: { placeholder: '模块编码' } },
+    { label: '操作类型', key: 'type', type: 'input', props: { placeholder: '类型编码' } },
     {
       label: '执行结果',
       key: 'result',
