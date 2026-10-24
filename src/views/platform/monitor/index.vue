@@ -35,6 +35,7 @@
       </ArtTableHeader>
       <ArtTable :data="tableData" :columns="columns" :loading="loading" height="360">
         <template #kind="scope">{{ kindLabels[scope.row.kind as MonitorKind] }}</template>
+        <template #service="scope">{{ scope.row.dbCluster || scope.row.service || '—' }}</template>
         <template #state="scope">
           <ElTag
             :type="scope.row.up === true ? 'success' : scope.row.up === false ? 'danger' : 'info'"
@@ -205,7 +206,13 @@
       dataSource: () => filteredTargets.value,
       columnsFactory: () => [
         { label: '类型', prop: 'kind', minWidth: 105, useSlot: true, slotName: 'kind' },
-        { label: '服务 / 集群', prop: 'service', minWidth: 190 },
+        {
+          label: '服务 / 集群',
+          prop: 'service',
+          minWidth: 190,
+          useSlot: true,
+          slotName: 'service'
+        },
         { label: '主机', prop: 'host', minWidth: 145 },
         { label: '实例地址', prop: 'instance', minWidth: 170 },
         { label: '状态', prop: 'up', minWidth: 90, useSlot: true, slotName: 'state' },
@@ -294,7 +301,13 @@
             target.instance === selectedTarget.value?.instance
         )
         selectedTarget.value = stillPresent
-        if (stillPresent) void loadTrend()
+        if (stillPresent) {
+          void loadTrend()
+        } else {
+          trendVersion++
+          trendLoading.value = false
+          trendPoints.value = []
+        }
       }
     } catch {
       loadError.value = '监控数据暂不可用，请检查 Prometheus 地址与采集状态。'
