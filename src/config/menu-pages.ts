@@ -18,6 +18,8 @@ const labels: Record<string, [string, string, string]> = {
   'system/user-store': ['门店授权', '/system/user-store', 'system:user-store'],
   'system/user-center': ['个人中心', '/system/user-center', 'common:profile'],
   'system/level': ['会员等级', '/system/level', 'system:level'],
+  'monitor/business': ['B 端在线用户', '/system-monitor/business', 'system:monitor:b'],
+  'monitor/customer': ['C 端在线用户', '/system-monitor/customer', 'system:monitor:c'],
   'dish/store': ['门店管理', '/restaurant/store', 'restaurant:store'],
   'dish/category': ['菜品分类', '/restaurant/category', 'restaurant:category'],
   'dish/menu': ['菜品管理', '/restaurant/dish', 'restaurant:dish'],
