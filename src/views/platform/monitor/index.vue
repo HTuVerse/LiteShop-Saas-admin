@@ -36,12 +36,19 @@
       <ArtTable :data="tableData" :columns="columns" :loading="loading" height="360">
         <template #kind="scope">{{ kindLabels[scope.row.kind as MonitorKind] }}</template>
         <template #state="scope">
-          <ElTag :type="scope.row.up === true ? 'success' : scope.row.up === false ? 'danger' : 'info'">
+          <ElTag
+            :type="scope.row.up === true ? 'success' : scope.row.up === false ? 'danger' : 'info'"
+          >
             {{ scope.row.up === true ? '正常' : scope.row.up === false ? '异常' : '待采集' }}
           </ElTag>
         </template>
         <template #action="scope">
-          <ElButton link type="primary" :disabled="!scope.row.instance" @click="selectTarget(scope.row)">
+          <ElButton
+            link
+            type="primary"
+            :disabled="!scope.row.instance"
+            @click="selectTarget(scope.row)"
+          >
             查看趋势
           </ElButton>
         </template>
@@ -53,25 +60,56 @@
         <div class="panel-title">
           <div>
             <h2>指标趋势</h2>
-            <p>{{ selectedTarget ? `${selectedTarget.service || kindLabels[selectedTarget.kind]} · ${selectedTarget.instance}` : '选择上方目标查看趋势' }}</p>
+            <p>{{
+              selectedTarget
+                ? `${selectedTarget.service || kindLabels[selectedTarget.kind]} · ${selectedTarget.instance}`
+                : '选择上方目标查看趋势'
+            }}</p>
           </div>
           <div v-if="selectedTarget" class="range-actions">
-            <ElButton v-for="item in metricOptions" :key="item.key" size="small"
-              :type="metric === item.key ? 'primary' : 'default'" @click="metric = item.key; loadTrend()">
+            <ElButton
+              v-for="item in metricOptions"
+              :key="item.key"
+              size="small"
+              :type="metric === item.key ? 'primary' : 'default'"
+              @click="
+                metric = item.key
+                loadTrend()
+              "
+            >
               {{ item.label }}
             </ElButton>
-            <ElButton v-for="minutes in [60, 360, 1440]" :key="minutes" size="small"
+            <ElButton
+              v-for="minutes in [60, 360, 1440]"
+              :key="minutes"
+              size="small"
               :type="rangeMinutes === minutes ? 'primary' : 'default'"
-              @click="rangeMinutes = minutes; loadTrend()">{{ minutes === 60 ? '1小时' : minutes === 360 ? '6小时' : '24小时' }}</ElButton>
+              @click="
+                rangeMinutes = minutes
+                loadTrend()
+              "
+              >{{ minutes === 60 ? '1小时' : minutes === 360 ? '6小时' : '24小时' }}</ElButton
+            >
           </div>
         </div>
-        <ArtLineChart v-if="trendPoints.length" :data="trendValues" :xAxisData="trendLabels"
-          :loading="trendLoading" height="280px" />
-        <ElEmpty v-else :description="trendLoading ? '正在加载指标' : '暂无趋势数据'" :image-size="72" />
+        <ArtLineChart
+          v-if="trendPoints.length"
+          :data="trendValues"
+          :xAxisData="trendLabels"
+          :loading="trendLoading"
+          height="280px"
+        />
+        <ElEmpty
+          v-else
+          :description="trendLoading ? '正在加载指标' : '暂无趋势数据'"
+          :image-size="72"
+        />
       </ElCard>
 
       <ElCard shadow="never" class="alert-card">
-        <div class="panel-title"><div><h2>当前告警</h2><p>由 Prometheus 告警规则产生</p></div></div>
+        <div class="panel-title"
+          ><div><h2>当前告警</h2><p>由 Prometheus 告警规则产生</p></div></div
+        >
         <ArtTable :data="alertRows" :columns="alertColumns" :loading="loading" height="280">
           <template #severity="scope">
             <ElTag :type="scope.row.severity === 'critical' ? 'danger' : 'warning'">
@@ -101,11 +139,22 @@
   defineOptions({ name: 'PlatformMonitor' })
 
   const kindLabels: Record<MonitorKind, string> = {
-    application: '应用服务', host: '服务器', mysql: 'MySQL', redis: 'Redis', rabbitmq: 'RabbitMQ'
+    application: '应用服务',
+    host: '服务器',
+    mysql: 'MySQL',
+    redis: 'Redis',
+    rabbitmq: 'RabbitMQ'
   }
   const metricByKind: Record<MonitorKind, Array<{ key: string; label: string }>> = {
-    application: [{ key: 'heap', label: '堆内存' }, { key: 'requests', label: '每秒请求' }],
-    host: [{ key: 'cpu', label: 'CPU %' }, { key: 'memory', label: '内存 %' }, { key: 'disk', label: '磁盘 %' }],
+    application: [
+      { key: 'heap', label: '堆内存' },
+      { key: 'requests', label: '每秒请求' }
+    ],
+    host: [
+      { key: 'cpu', label: 'CPU %' },
+      { key: 'memory', label: '内存 %' },
+      { key: 'disk', label: '磁盘 %' }
+    ],
     mysql: [{ key: 'connections', label: '连接数' }],
     redis: [{ key: 'memory', label: '内存字节' }],
     rabbitmq: [{ key: 'messages', label: '消息积压' }]
@@ -127,16 +176,30 @@
   let trendVersion = 0
 
   const filterItems = computed(() => [
-    { label: '目标类型', key: 'kind', type: 'select', props: { clearable: true, options: [
-      { label: '全部', value: '' }, ...Object.entries(kindLabels).map(([value, label]) => ({ label, value }))
-    ] } },
+    {
+      label: '目标类型',
+      key: 'kind',
+      type: 'select',
+      props: {
+        clearable: true,
+        options: [
+          { label: '全部', value: '' },
+          ...Object.entries(kindLabels).map(([value, label]) => ({ label, value }))
+        ]
+      }
+    },
     { label: '名称或地址', key: 'keyword', type: 'input', props: { clearable: true } }
   ])
-  const filteredTargets = computed(() => targets.value.filter((target) =>
-    (!appliedFilters.kind || target.kind === appliedFilters.kind) &&
-    (!appliedFilters.keyword || `${target.service} ${target.host} ${target.instance} ${target.dbCluster}`
-      .toLowerCase().includes(appliedFilters.keyword.toLowerCase()))
-  ))
+  const filteredTargets = computed(() =>
+    targets.value.filter(
+      (target) =>
+        (!appliedFilters.kind || target.kind === appliedFilters.kind) &&
+        (!appliedFilters.keyword ||
+          `${target.service} ${target.host} ${target.instance} ${target.dbCluster}`
+            .toLowerCase()
+            .includes(appliedFilters.keyword.toLowerCase()))
+    )
+  )
   const { data: tableData, columns } = useTable({
     core: {
       dataSource: () => filteredTargets.value,
@@ -166,12 +229,22 @@
     { label: '异常', value: overview.value?.down ?? '--', tone: 'unhealthy' },
     { label: '当前告警', value: overview.value?.alertCount ?? '--', tone: 'unhealthy' }
   ])
-  const metricOptions = computed(() => selectedTarget.value ? metricByKind[selectedTarget.value.kind] : [])
+  const metricOptions = computed(() =>
+    selectedTarget.value ? metricByKind[selectedTarget.value.kind] : []
+  )
   const trendValues = computed(() => trendPoints.value.map((point) => point.value))
-  const trendLabels = computed(() => trendPoints.value.map((point) =>
-    new Date(point.time * 1000).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })))
+  const trendLabels = computed(() =>
+    trendPoints.value.map((point) =>
+      new Date(point.time * 1000).toLocaleTimeString('zh-CN', {
+        hour: '2-digit',
+        minute: '2-digit'
+      })
+    )
+  )
 
-  function applyFilters() { Object.assign(appliedFilters, filters) }
+  function applyFilters() {
+    Object.assign(appliedFilters, filters)
+  }
   function resetFilters() {
     Object.assign(filters, { kind: '', keyword: '' })
     applyFilters()
@@ -188,8 +261,10 @@
     trendLoading.value = true
     try {
       const result = await fetchMonitorTrend({
-        kind: selectedTarget.value.kind, instance: selectedTarget.value.instance,
-        metric: metric.value, rangeMinutes: rangeMinutes.value
+        kind: selectedTarget.value.kind,
+        instance: selectedTarget.value.instance,
+        metric: metric.value,
+        rangeMinutes: rangeMinutes.value
       })
       if (version === trendVersion) trendPoints.value = result.points
     } catch {
@@ -203,7 +278,9 @@
     loading.value = true
     try {
       const [nextOverview, nextTargets, nextAlerts] = await Promise.all([
-        fetchMonitorOverview(), fetchMonitorTargets(), fetchMonitorAlerts()
+        fetchMonitorOverview(),
+        fetchMonitorTargets(),
+        fetchMonitorAlerts()
       ])
       overview.value = nextOverview
       targets.value = nextTargets
@@ -211,8 +288,11 @@
       loadError.value = ''
       lastUpdated.value = new Date().toLocaleTimeString('zh-CN')
       if (selectedTarget.value) {
-        const stillPresent = nextTargets.find((target) =>
-          target.kind === selectedTarget.value?.kind && target.instance === selectedTarget.value?.instance)
+        const stillPresent = nextTargets.find(
+          (target) =>
+            target.kind === selectedTarget.value?.kind &&
+            target.instance === selectedTarget.value?.instance
+        )
         selectedTarget.value = stillPresent
         if (stillPresent) void loadTrend()
       }
@@ -233,22 +313,96 @@
 </script>
 
 <style scoped lang="scss">
-  .monitor-page { display: flex; flex-direction: column; gap: 18px; padding-bottom: 20px; }
-  .monitor-heading, .monitor-heading-actions, .panel-title, .range-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-  .monitor-heading h1 { margin: 0 0 6px; font-size: 24px; }
-  .monitor-heading p, .panel-title p, .monitor-heading-actions span { margin: 0; color: var(--art-text-gray-600); font-size: 13px; }
-  .monitor-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
-  .monitor-stats :deep(.el-card__body) { display: flex; flex-direction: column; gap: 8px; }
-  .monitor-stats strong { font-size: 28px; }
-  .monitor-stats .healthy { color: var(--el-color-success); }
-  .monitor-stats .unhealthy { color: var(--el-color-danger); }
-  .monitor-bottom { display: grid; grid-template-columns: 1.6fr 1fr; gap: 16px; }
-  .panel-title { min-height: 45px; margin-bottom: 12px; }
-  .panel-title h2 { margin: 0 0 5px; font-size: 17px; }
-  .range-actions { justify-content: flex-end; flex-wrap: wrap; }
-  @media (max-width: 1100px) { .monitor-bottom { grid-template-columns: 1fr; } }
-  @media (max-width: 700px) {
-    .monitor-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .monitor-heading, .panel-title { align-items: flex-start; flex-direction: column; }
+  .monitor-page {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    padding-bottom: 20px;
+  }
+
+  .monitor-heading,
+  .monitor-heading-actions,
+  .panel-title,
+  .range-actions {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .monitor-heading h1 {
+    margin: 0 0 6px;
+    font-size: 24px;
+  }
+
+  .monitor-heading p,
+  .panel-title p,
+  .monitor-heading-actions span {
+    margin: 0;
+    font-size: 13px;
+    color: var(--art-text-gray-600);
+  }
+
+  .monitor-stats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 16px;
+  }
+
+  .monitor-stats :deep(.el-card__body) {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .monitor-stats strong {
+    font-size: 28px;
+  }
+
+  .monitor-stats .healthy {
+    color: var(--el-color-success);
+  }
+
+  .monitor-stats .unhealthy {
+    color: var(--el-color-danger);
+  }
+
+  .monitor-bottom {
+    display: grid;
+    grid-template-columns: 1.6fr 1fr;
+    gap: 16px;
+  }
+
+  .panel-title {
+    min-height: 45px;
+    margin-bottom: 12px;
+  }
+
+  .panel-title h2 {
+    margin: 0 0 5px;
+    font-size: 17px;
+  }
+
+  .range-actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  @media (width <= 1100px) {
+    .monitor-bottom {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (width <= 700px) {
+    .monitor-stats {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .monitor-heading,
+    .panel-title {
+      flex-direction: column;
+      align-items: flex-start;
+    }
   }
 </style>
