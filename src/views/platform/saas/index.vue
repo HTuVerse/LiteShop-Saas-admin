@@ -756,8 +756,7 @@
   const subscriptionForm = reactive<TenantSubscription>({
     planVersionId: '',
     status: 'ACTIVE',
-    billingCycle: 'MONTHLY',
-    autoRenew: 0
+    billingCycle: 'MONTHLY'
   })
   const tenantAddonForm = reactive<SubscriptionAddon>({ addonId: '', quantity: 1 })
   type OverrideForm = EntitlementOverride & { effectiveRange?: [string, string] }
@@ -810,7 +809,7 @@
     features.value.find((item) => String(item.id) === String(overrideForm.featureId))
   )
   const versionOptions = computed(() =>
-    plans.value.flatMap((plan) =>
+    plans.value.filter((plan) => plan.status === 1).flatMap((plan) =>
       (versions.value[String(plan.id)] || [])
         .filter((v) => v.status === 'PUBLISHED')
         .map((v) => ({ value: v.id, label: `${plan.planName} · v${v.versionNo}` }))
@@ -1082,12 +1081,6 @@
       }
     },
     {
-      key: 'autoRenew',
-      label: '自动续费',
-      type: 'switch',
-      props: { activeValue: 1, inactiveValue: 0 }
-    },
-    {
       key: 'currentPeriodStart',
       label: '周期开始',
       type: 'datetime',
@@ -1097,6 +1090,7 @@
       key: 'currentPeriodEnd',
       label: '周期结束',
       type: 'datetime',
+      hidden: subscriptionForm.billingCycle !== 'CUSTOM',
       props: { valueFormat: 'YYYY-MM-DDTHH:mm:ss', placeholder: '请选择结束时间' }
     }
   ])
@@ -1139,7 +1133,7 @@
         type: 'select',
         props: {
           filterable: true,
-          options: features.value.map((item) => ({
+          options: features.value.filter((item) => item.status === 1).map((item) => ({
             label: `${item.featureName} · ${item.featureCode}`,
             value: item.id
           })),
@@ -1449,7 +1443,7 @@
     editingVersion.value = version
     const rules = await listPlanEntitlements(version.id)
     const byFeature = new Map(rules.map((row) => [String(row.featureId), row]))
-    planRuleRows.value = features.value.map((feature) => ({
+    planRuleRows.value = features.value.filter((feature) => feature.status === 1).map((feature) => ({
       ...feature,
       featureId: feature.id!,
       enabled: byFeature.get(String(feature.id))?.enabled === 1,
@@ -1571,8 +1565,10 @@
       saving.value = false
     }
   }
+  let tenantLoadRequestId = 0
   async function loadTenant() {
     if (!tenantId.value) return
+    const requestId = ++tenantLoadRequestId
     const selectedTenantId = tenantId.value
     tenantState.value = { tenantId: selectedTenantId, features: {} }
     tenantSubscriptions.value = []
@@ -1581,33 +1577,30 @@
     tenantLoading.value = true
     try {
       const state = await getTenantEntitlements(selectedTenantId)
-      if (String(tenantId.value) !== String(selectedTenantId)) return
+      if (requestId !== tenantLoadRequestId || String(tenantId.value) !== String(selectedTenantId)) return
       tenantState.value = state
       const subscriptionRows = await listTenantSubscriptions(selectedTenantId)
-      if (String(tenantId.value) !== String(selectedTenantId)) return
+      if (requestId !== tenantLoadRequestId || String(tenantId.value) !== String(selectedTenantId)) return
       tenantSubscriptions.value = subscriptionRows
       const [addOnRows, overrideRows] = await Promise.all([
         listTenantAddons(selectedTenantId),
         listTenantOverrides(selectedTenantId)
       ])
-      if (String(tenantId.value) !== String(selectedTenantId)) return
+      if (requestId !== tenantLoadRequestId || String(tenantId.value) !== String(selectedTenantId)) return
       tenantAddons.value = addOnRows
       tenantOverrides.value = overrideRows
     } finally {
-      if (String(tenantId.value) === String(selectedTenantId)) tenantLoading.value = false
+      if (requestId === tenantLoadRequestId && String(tenantId.value) === String(selectedTenantId)) tenantLoading.value = false
     }
   }
   function openSubscription() {
-    const start = new Date(),
-      end = new Date()
-    end.setMonth(end.getMonth() + 1)
+    const start = new Date()
     replace(subscriptionForm, {
       planVersionId: versionOptions.value[0]?.value || '',
       status: 'ACTIVE',
       billingCycle: 'MONTHLY',
-      autoRenew: 0,
       currentPeriodStart: formatLocal(start),
-      currentPeriodEnd: formatLocal(end)
+      currentPeriodEnd: undefined
     })
     subscriptionVisible.value = true
   }
@@ -1616,7 +1609,11 @@
       return ElMessage.warning('请选择套餐版本')
     saving.value = true
     try {
-      await assignTenantSubscription(tenantId.value, { ...subscriptionForm })
+      await assignTenantSubscription(tenantId.value, {
+        ...subscriptionForm,
+        currentPeriodEnd:
+          subscriptionForm.billingCycle === 'CUSTOM' ? subscriptionForm.currentPeriodEnd : undefined
+      })
       subscriptionVisible.value = false
       await loadTenant()
       ElMessage.success('租户套餐已生效')
