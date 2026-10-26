@@ -173,7 +173,7 @@
   import { useRouter } from 'vue-router'
   import { ElMessage } from 'element-plus'
   import { fetchAdminWorkspaces, normalizeUser, switchAdminWorkspace } from '@/api/auth'
-  import { enterTenant, exitTenant, listTenants } from '@/api/tenant'
+  import { enterTenant, exitTenant, listTenants, type TenantWithAccess } from '@/api/tenant'
   import { useUserStore } from '@/store/modules/user'
   import type { BackendUser, StoreOption, Tenant, WorkspaceOption } from '@/types/backend'
   import workspaceHero from '@/assets/images/workspace/workspace-hero.png'
@@ -196,14 +196,14 @@
     disabled: boolean
     defaultStore: boolean
     tenant?: WorkspaceOption
-    platformTenant?: Tenant
+    platformTenant?: TenantWithAccess
     store?: StoreOption
   }
 
   const router = useRouter()
   const session = useUserStore()
   const workspaces = ref<WorkspaceOption[]>([])
-  const platformTenants = ref<Tenant[]>([])
+  const platformTenants = ref<TenantWithAccess[]>([])
   const loading = ref(false)
   const busy = ref(false)
   const error = ref('')
@@ -251,7 +251,8 @@
           level: 'tenant',
           levelLabel: '租户级',
           current: String(session.activeTenant?.id) === String(tenant.id),
-          disabled: tenant.status !== 1 || isTenantExpired(tenant),
+          disabled:
+            tenant.status !== 1 || isTenantExpired(tenant) || tenant.accessAvailable === false,
           defaultStore: false,
           platformTenant: tenant
         }))
@@ -342,7 +343,7 @@
     try {
       if (session.isSuperAdmin) {
         const pageSize = 200
-        const records: Tenant[] = []
+        const records: TenantWithAccess[] = []
         let currentPage = 1
         while (true) {
           const result = await listTenants({ currentPage, pageSize, status: 1 })

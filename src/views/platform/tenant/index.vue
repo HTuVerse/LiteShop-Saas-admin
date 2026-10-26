@@ -28,8 +28,22 @@
         <template #tableColumnsSlot5="{ row }">{{ row.expireTime || '长期有效' }}</template>
         <template #tableColumnsSlot6="{ row }"
           ><ElTag
-            :type="row.status !== 1 ? 'info' : isTenantExpired(row) ? 'warning' : 'success'"
-            >{{ row.status !== 1 ? '停用' : isTenantExpired(row) ? '已到期' : '启用' }}</ElTag
+            :type="
+              row.status !== 1
+                ? 'info'
+                : isTenantExpired(row) || row.accessAvailable === false
+                  ? 'warning'
+                  : 'success'
+            "
+            >{{
+              row.status !== 1
+                ? '停用'
+                : isTenantExpired(row)
+                  ? '已到期'
+                  : row.accessAvailable === false
+                    ? '套餐不可用'
+                    : '启用'
+            }}</ElTag
           ></template
         >
       </ArtTable>
@@ -129,7 +143,8 @@
     listTenants,
     setTenantStatus,
     updateTenant,
-    type PublishedPlanOption
+    type PublishedPlanOption,
+    type TenantWithAccess
   } from '@/api/tenant'
   import { useUserStore } from '@/store/modules/user'
   import type { Id, Tenant } from '@/types/backend'
@@ -309,13 +324,17 @@
           width: 150,
           fixed: 'right',
           align: 'center',
-          formatter: (row: Tenant) =>
+          formatter: (row: TenantWithAccess) =>
             h('div', { class: 'flex items-center justify-center' }, [
               h(ArtButtonTable, {
                 icon: 'ri:login-box-line',
                 iconClass: 'bg-theme/12 text-theme',
                 label: '进入商户',
-                disabled: row.status !== 1 || isTenantExpired(row) || entering.value,
+                disabled:
+                  row.status !== 1 ||
+                  isTenantExpired(row) ||
+                  row.accessAvailable === false ||
+                  entering.value,
                 onClick: () => enter(row)
               }),
               h(ArtButtonTable, {

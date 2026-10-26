@@ -1,12 +1,13 @@
 import request from '@/utils/http'
 import type { Id, Page, Tenant } from '@/types/backend'
 
+export type TenantWithAccess = Tenant & { accessAvailable?: boolean }
 export const listTenants = (params: {
   currentPage: number
   pageSize: number
   keyword?: string
   status?: number
-}) => request.get<Page<Tenant>>({ url: '/sys-tenant/page', params })
+}) => request.get<Page<TenantWithAccess>>({ url: '/sys-tenant/page', params })
 export interface PublishedPlanOption {
   planId: Id
   planVersionId: Id
