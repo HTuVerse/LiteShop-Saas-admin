@@ -70,7 +70,7 @@
       <div class="result-heading">
         <div>
           <strong>{{ resultTitle }}</strong>
-          <span>共 {{ filteredCards.length }} 个可用入口</span>
+          <span>共 {{ filteredCards.length }} 个工作空间</span>
         </div>
         <span class="scope-tip">
           <ArtSvgIcon icon="ri:shield-check-line" />
@@ -128,7 +128,7 @@
               <span class="card-status-row">
                 <span class="available-badge">
                   <i></i>
-                  {{ item.current ? '当前空间' : '可进入' }}
+                  {{ item.disabled ? '暂不可用' : item.current ? '当前空间' : '可进入' }}
                 </span>
                 <span v-if="item.defaultStore" class="default-badge">默认门店</span>
               </span>
@@ -212,6 +212,9 @@
   const viewMode = ref<ViewMode>('grid')
 
   const isTenantAdmin = (roles: string[]) => roles.includes('ADMIN')
+  const isTenantExpired = (tenant: Tenant) =>
+    Boolean(tenant.expireTime) &&
+    Date.parse(`${tenant.expireTime!.replace(' ', 'T')}+08:00`) <= Date.now()
   const roleLabel = (roles: string[]) => {
     if (roles.includes('ADMIN')) return '租户管理员'
     if (roles.includes('STORE_ADMIN')) return '店长'
@@ -248,7 +251,7 @@
           level: 'tenant',
           levelLabel: '租户级',
           current: String(session.activeTenant?.id) === String(tenant.id),
-          disabled: tenant.status !== 1,
+          disabled: tenant.status !== 1 || isTenantExpired(tenant),
           defaultStore: false,
           platformTenant: tenant
         }))
@@ -338,8 +341,16 @@
     error.value = ''
     try {
       if (session.isSuperAdmin) {
-        const page = await listTenants({ currentPage: 1, pageSize: 200, status: 1 })
-        platformTenants.value = page.records
+        const pageSize = 200
+        const records: Tenant[] = []
+        let currentPage = 1
+        while (true) {
+          const result = await listTenants({ currentPage, pageSize, status: 1 })
+          records.push(...result.records)
+          if (!result.records.length || records.length >= result.total) break
+          currentPage++
+        }
+        platformTenants.value = records
       } else {
         workspaces.value = await fetchAdminWorkspaces()
       }
