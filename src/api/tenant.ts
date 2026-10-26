@@ -7,9 +7,33 @@ export const listTenants = (params: {
   keyword?: string
   status?: number
 }) => request.get<Page<Tenant>>({ url: '/sys-tenant/page', params })
-export const createTenant = (data: Partial<Tenant>) =>
+export interface PublishedPlanOption {
+  planId: Id
+  planVersionId: Id
+  planCode: string
+  planName: string
+  description?: string
+  versionNo: number
+  monthlyPrice?: number | null
+  yearlyPrice?: number | null
+  currency?: string
+}
+export const listPublishedPlanOptions = () =>
+  request.get<PublishedPlanOption[]>({ url: '/saas/admin/plan-options' })
+export interface TenantCreateRequest extends Pick<Tenant, 'tenantCode' | 'tenantName'> {
+  contactName?: string
+  contactPhone?: string
+  remark?: string
+  status?: number
+  planVersionId: Id
+  billingCycle: 'MONTHLY' | 'YEARLY'
+}
+export const createTenant = (data: TenantCreateRequest) =>
   request.post<Tenant>({ url: '/sys-tenant', data })
-export const updateTenant = (data: Tenant) => request.put<Tenant>({ url: '/sys-tenant', data })
+export type TenantProfileUpdate = Pick<Tenant, 'id' | 'tenantCode' | 'tenantName'> &
+  Partial<Pick<Tenant, 'contactName' | 'contactPhone' | 'remark'>>
+export const updateTenant = (data: TenantProfileUpdate) =>
+  request.put<Tenant>({ url: '/sys-tenant', data })
 export const setTenantStatus = (id: Id, status: number) =>
   request.put({ url: `/sys-tenant/${id}/status`, params: { status } })
 export const enterTenant = (id: Id) => request.post<Tenant>({ url: `/sys-tenant/${id}/enter` })

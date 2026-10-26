@@ -27,9 +27,10 @@
       >
         <template #tableColumnsSlot5="{ row }">{{ row.expireTime || '长期有效' }}</template>
         <template #tableColumnsSlot6="{ row }"
-          ><ElTag :type="row.status === 1 ? 'success' : 'info'">{{
-            row.status === 1 ? '启用' : '停用'
-          }}</ElTag></template
+          ><ElTag
+            :type="row.status !== 1 ? 'info' : isTenantExpired(row) ? 'warning' : 'success'"
+            >{{ row.status !== 1 ? '停用' : isTenantExpired(row) ? '已到期' : '启用' }}</ElTag
+          ></template
         >
       </ArtTable>
     </ElCard>
@@ -57,6 +58,14 @@
             : '请先在平台会员等级体系页面设置默认体系，再创建商户。'
         "
       />
+      <ElAlert
+        v-if="!form.id && !planOptionsLoading && !planOptions.length"
+        class="initialization-notice"
+        type="warning"
+        :closable="false"
+        show-icon
+        title="暂无可用套餐版本，请先在 SaaS 套餐管理中发布套餐"
+      />
       <ArtForm ref="formRef" :model="form" :rules="rules" label-width="95px">
         <ElFormItem label="商户名称" prop="tenantName"
           ><ElInput v-model.trim="form.tenantName" maxlength="100"
@@ -66,16 +75,30 @@
         /></ElFormItem>
         <ElFormItem label="联系人"><ElInput v-model.trim="form.contactName" /></ElFormItem
         ><ElFormItem label="联系电话"><ElInput v-model.trim="form.contactPhone" /></ElFormItem>
-        <ElFormItem label="服务到期"
-          ><ElDatePicker
-            v-model="form.expireTime"
-            type="datetime"
-            value-format="YYYY-MM-DD HH:mm:ss"
-            placeholder="不填为长期有效"
-        /></ElFormItem>
-        <ElFormItem label="状态"
-          ><ElSwitch v-model="form.status" :active-value="1" :inactive-value="0" /></ElFormItem
-        ><ElFormItem label="备注"
+        <ElFormItem v-if="!form.id" label="初始套餐" prop="planVersionId">
+          <ElSelect
+            v-model="form.planVersionId"
+            :loading="planOptionsLoading"
+            placeholder="请选择已发布套餐"
+          >
+            <ElOption
+              v-for="plan in planOptions"
+              :key="String(plan.planVersionId)"
+              :label="`${plan.planName} · v${plan.versionNo}`"
+              :value="plan.planVersionId"
+            />
+          </ElSelect>
+        </ElFormItem>
+        <ElFormItem v-if="!form.id" label="计费方式">
+          <ElSelect v-model="form.billingCycle">
+            <ElOption label="月付" value="MONTHLY" />
+            <ElOption label="年付" value="YEARLY" />
+          </ElSelect>
+        </ElFormItem>
+        <ElFormItem v-if="form.id" label="服务到期">
+          <span>{{ form.expireTime || '长期有效' }}（由套餐订阅管理）</span>
+        </ElFormItem>
+        <ElFormItem label="备注"
           ><ElInput v-model="form.remark" type="textarea"
         /></ElFormItem> </ArtForm
       ><template #footer
@@ -83,7 +106,10 @@
         ><ElButton
           type="primary"
           :loading="saving"
-          :disabled="!form.id && (templateLoading || !initialLevelTemplate)"
+          :disabled="
+            !form.id &&
+            (templateLoading || planOptionsLoading || !initialLevelTemplate || !planOptions.length)
+          "
           @click="save"
           >保存</ElButton
         ></template
@@ -99,16 +125,20 @@
   import {
     createTenant,
     enterTenant,
+    listPublishedPlanOptions,
     listTenants,
     setTenantStatus,
-    updateTenant
+    updateTenant,
+    type PublishedPlanOption
   } from '@/api/tenant'
   import { useUserStore } from '@/store/modules/user'
-  import type { Tenant } from '@/types/backend'
+  import type { Id, Tenant } from '@/types/backend'
   import { listLevelSchemes, type LevelScheme } from '@/api/member-level'
   import ArtButtonTable from '@/components/core/forms/art-button-table/index.vue'
   const initialLevelTemplate = ref<LevelScheme>()
   const templateLoading = ref(false)
+  const planOptions = ref<PublishedPlanOption[]>([])
+  const planOptionsLoading = ref(false)
   const session = useUserStore(),
     router = useRouter()
   const keyword = ref(''),
@@ -124,16 +154,24 @@
     contactName: '',
     contactPhone: '',
     remark: '',
-    expireTime: null
+    expireTime: null,
+    planVersionId: '' as Id,
+    billingCycle: 'MONTHLY' as 'MONTHLY' | 'YEARLY'
   })
-  const form = reactive<Partial<Tenant>>(defaults())
+  const form = reactive<
+    Partial<Tenant> & { planVersionId: Id; billingCycle: 'MONTHLY' | 'YEARLY' }
+  >(defaults())
   const rules: FormRules = {
     tenantName: [{ required: true, message: '请输入商户名称' }],
     tenantCode: [
       { required: true, message: '请输入商户编码' },
       { pattern: /^[A-Za-z0-9_-]+$/, message: '编码仅支持字母、数字、横线及下划线' }
-    ]
+    ],
+    planVersionId: [{ required: true, message: '请选择已发布套餐' }]
   }
+  const isTenantExpired = (row: Tenant) =>
+    Boolean(row.expireTime) &&
+    Date.parse(`${row.expireTime!.replace(' ', 'T')}+08:00`) <= Date.now()
   async function search() {
     replaceSearchParams({
       keyword: keyword.value || undefined,
@@ -147,17 +185,22 @@
     visible.value = true
     if (!row) {
       initialLevelTemplate.value = undefined
+      planOptions.value = []
       templateLoading.value = true
-      try {
-        const { templates } = await listLevelSchemes()
+      planOptionsLoading.value = true
+      const [schemesResult, plansResult] = await Promise.allSettled([
+        listLevelSchemes(),
+        listPublishedPlanOptions()
+      ])
+      if (schemesResult.status === 'fulfilled') {
+        const { templates } = schemesResult.value
         initialLevelTemplate.value = templates.find(
           (item) => item.isDefault === 1 && item.status === 1
         )
-      } catch {
-        // Request errors are reported centrally; cancelling a confirmation keeps the current state.
-      } finally {
-        templateLoading.value = false
       }
+      if (plansResult.status === 'fulfilled') planOptions.value = plansResult.value
+      templateLoading.value = false
+      planOptionsLoading.value = false
     }
   }
   async function save() {
@@ -165,8 +208,27 @@
     saving.value = true
     try {
       const editing = !!form.id
-      if (editing) await updateTenant(form as Tenant)
-      else await createTenant(form)
+      if (editing) {
+        await updateTenant({
+          id: form.id!,
+          tenantCode: form.tenantCode!,
+          tenantName: form.tenantName!,
+          contactName: form.contactName,
+          contactPhone: form.contactPhone,
+          remark: form.remark
+        })
+      } else {
+        await createTenant({
+          tenantCode: form.tenantCode!,
+          tenantName: form.tenantName!,
+          contactName: form.contactName,
+          contactPhone: form.contactPhone,
+          remark: form.remark,
+          status: 1,
+          planVersionId: form.planVersionId,
+          billingCycle: form.billingCycle
+        })
+      }
       visible.value = false
       ElMessage.success('商户资料已保存')
       await (editing ? refreshUpdate() : refreshCreate())
@@ -253,7 +315,7 @@
                 icon: 'ri:login-box-line',
                 iconClass: 'bg-theme/12 text-theme',
                 label: '进入商户',
-                disabled: row.status !== 1 || entering.value,
+                disabled: row.status !== 1 || isTenantExpired(row) || entering.value,
                 onClick: () => enter(row)
               }),
               h(ArtButtonTable, {
