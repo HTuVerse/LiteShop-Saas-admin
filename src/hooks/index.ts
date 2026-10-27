@@ -30,3 +30,6 @@ export { useChart, useChartComponent, useChartOps } from './core/useChart'
 
 // 布局高度
 export { useLayoutHeight, useAutoLayoutHeight } from './core/useLayoutHeight'
+
+// AI 店长额度、状态文案与证据跳转
+export { useAiQuota, resolveAiStatusMessage, useAiEvidenceNavigator } from './core/useAiManager'

@@ -131,6 +131,8 @@ export interface LineDataItem {
   name: string
   /** 数据值 */
   data: number[]
+  /** 纵轴索引：0 为左侧金额轴，1 为右侧数量轴 */
+  yAxisIndex?: 0 | 1
   /** 线条宽度 */
   lineWidth?: number
   /** 是否显示区域填充 */
@@ -158,6 +160,10 @@ export interface LineChartProps extends BaseChartProps, AxisDisplayProps, Intera
   data: number[] | LineDataItem[]
   /** X轴标签数据 */
   xAxisData?: string[]
+  /** 是否显示右侧数量轴 */
+  dualYAxis?: boolean
+  /** 右侧纵轴名称 */
+  rightAxisName?: string
   /** 线条宽度 */
   lineWidth?: number
   /** 是否显示区域填充 */
@@ -305,6 +311,38 @@ export interface BidirectionalBarChartProps
   positiveBorderRadius?: number | number[]
   /** 负向数据圆角配置 */
   negativeBorderRadius?: number | number[]
+}
+
+// 漏斗图数据项接口
+export interface FunnelDataItem {
+  /** 环节名称 */
+  name: string
+  /** 环节数值 */
+  value: number
+}
+
+// 漏斗图 Props 接口 - 用于转化/流失分析
+export interface FunnelChartProps extends BaseChartProps, InteractionProps {
+  /** 图表数据 */
+  data: FunnelDataItem[]
+  /** 是否显示标签 */
+  showLabel?: boolean
+  /** 数值单位 */
+  unit?: string
+}
+
+// 热力图 Props 接口 - 用于时段/星期分布分析
+export interface HeatmapChartProps extends BaseChartProps {
+  /** X 轴分类（如时段） */
+  xAxisData: string[]
+  /** Y 轴分类（如星期/门店） */
+  yAxisData: string[]
+  /** 热力数据，格式为 [xIndex, yIndex, value] */
+  data: number[][]
+  /** 数值单位 */
+  unit?: string
+  /** 是否显示提示框 */
+  showTooltip?: boolean
 }
 
 // 图表配置生成器函数类型
